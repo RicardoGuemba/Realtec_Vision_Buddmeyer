@@ -1,0 +1,41 @@
+================================================================================
+  BUDDMEYER VISION SYSTEM v2.0 - INSTALADOR .EXE
+================================================================================
+
+ARQUIVO INSTALADOR:
+  buddmeyer_vision_v2/installer/dist/BuddmeyerVisionInstaller.exe
+
+COMO USAR:
+  1. Dê duplo clique em: BuddmeyerVisionInstaller.exe
+  2. Aguarde a instalação (10-30 minutos)
+  3. Após instalação, navegue até o diretório instalado
+  4. Dê duplo clique em: Iniciar_Buddmeyer_Vision.bat
+
+REQUISITOS:
+  - Windows 10/11
+  - Python 3.10+ (será verificado pelo instalador)
+  - Conexão com internet
+  - ~10 GB de espaço em disco
+
+O QUE O INSTALADOR FAZ:
+  ✓ Verifica Python 3.10+
+  ✓ Copia todos os arquivos do projeto
+  ✓ Cria ambiente virtual Python
+  ✓ Instala todas as dependências:
+    - PySide6 (Interface)
+    - PyTorch (ML com CUDA)
+    - Transformers (RT-DETR)
+    - OpenCV (Processamento)
+    - aphyt (Comunicação CIP)
+    - E mais 30+ pacotes
+  ✓ Cria scripts de inicialização
+  ✓ Verifica instalação
+
+DIRETÓRIO DE INSTALAÇÃO PADRÃO:
+  C:\Users\[Usuário]\BuddmeyerVision
+
+APÓS INSTALAÇÃO:
+  Navegue até o diretório de instalação e execute:
+  Iniciar_Buddmeyer_Vision.bat
+
+================================================================================

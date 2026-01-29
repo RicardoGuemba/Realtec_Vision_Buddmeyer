@@ -1,0 +1,287 @@
+# -*- coding: utf-8 -*-
+"""
+Painel de status lateral.
+"""
+
+from typing import Optional
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QFrame, QGroupBox, QGridLayout
+)
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QFont, QColor
+
+from detection.events import DetectionEvent
+from communication.connection_state import ConnectionState, ConnectionStatus
+from control.robot_controller import RobotControlState
+
+
+class StatusIndicator(QFrame):
+    """Indicador de status com LED."""
+    
+    def __init__(self, label: str, parent=None):
+        super().__init__(parent)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(8)
+        
+        # LED
+        self._led = QLabel()
+        self._led.setFixedSize(12, 12)
+        self._led.setStyleSheet("""
+            QLabel {
+                background-color: #6c757d;
+                border-radius: 6px;
+                border: 1px solid #495057;
+            }
+        """)
+        layout.addWidget(self._led)
+        
+        # Label
+        self._label = QLabel(label)
+        self._label.setStyleSheet("color: #e0e0e0;")
+        layout.addWidget(self._label)
+        
+        layout.addStretch()
+        
+        # Status
+        self._status_label = QLabel("---")
+        self._status_label.setStyleSheet("color: #adb5bd;")
+        layout.addWidget(self._status_label)
+    
+    def set_status(self, status: str, color: str = "gray") -> None:
+        """Define o status."""
+        self._status_label.setText(status)
+        
+        colors = {
+            "green": "#28a745",
+            "yellow": "#ffc107",
+            "red": "#dc3545",
+            "blue": "#007bff",
+            "gray": "#6c757d",
+        }
+        
+        led_color = colors.get(color, colors["gray"])
+        self._led.setStyleSheet(f"""
+            QLabel {{
+                background-color: {led_color};
+                border-radius: 6px;
+                border: 1px solid {led_color};
+            }}
+        """)
+
+
+class StatusPanel(QWidget):
+    """
+    Painel de status lateral.
+    
+    Exibe:
+    - Status do sistema
+    - Status do CLP
+    - Última detecção
+    - Contadores
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        self.setFixedWidth(280)
+        self._setup_ui()
+    
+    def _setup_ui(self) -> None:
+        """Configura a interface."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(12)
+        
+        # Título
+        title = QLabel("STATUS DO SISTEMA")
+        title.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        title.setStyleSheet("color: #00d4ff;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+        
+        # Separador
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setStyleSheet("background-color: #2d3748;")
+        layout.addWidget(separator)
+        
+        # Status do Sistema
+        system_group = QGroupBox("Sistema")
+        system_group.setStyleSheet("""
+            QGroupBox {
+                color: #e0e0e0;
+                border: 1px solid #3d4852;
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+            }
+        """)
+        system_layout = QVBoxLayout(system_group)
+        
+        self._system_status = StatusIndicator("Estado")
+        system_layout.addWidget(self._system_status)
+        
+        self._stream_status = StatusIndicator("Stream")
+        system_layout.addWidget(self._stream_status)
+        
+        self._inference_status = StatusIndicator("Detecção")
+        system_layout.addWidget(self._inference_status)
+        
+        layout.addWidget(system_group)
+        
+        # Status do CLP
+        plc_group = QGroupBox("CLP")
+        plc_group.setStyleSheet(system_group.styleSheet())
+        plc_layout = QVBoxLayout(plc_group)
+        
+        self._plc_status = StatusIndicator("Conexão")
+        plc_layout.addWidget(self._plc_status)
+        
+        self._robot_status = StatusIndicator("Robô")
+        plc_layout.addWidget(self._robot_status)
+        
+        self._robot_state = StatusIndicator("Estado")
+        plc_layout.addWidget(self._robot_state)
+        
+        layout.addWidget(plc_group)
+        
+        # Última Detecção
+        detection_group = QGroupBox("Última Detecção")
+        detection_group.setStyleSheet(system_group.styleSheet())
+        detection_layout = QGridLayout(detection_group)
+        
+        detection_layout.addWidget(QLabel("Classe:"), 0, 0)
+        self._det_class = QLabel("---")
+        self._det_class.setStyleSheet("color: #00d4ff; font-weight: bold;")
+        detection_layout.addWidget(self._det_class, 0, 1)
+        
+        detection_layout.addWidget(QLabel("Confiança:"), 1, 0)
+        self._det_confidence = QLabel("---")
+        self._det_confidence.setStyleSheet("color: #28a745;")
+        detection_layout.addWidget(self._det_confidence, 1, 1)
+        
+        detection_layout.addWidget(QLabel("Centroide X:"), 2, 0)
+        self._det_x = QLabel("---")
+        detection_layout.addWidget(self._det_x, 2, 1)
+        
+        detection_layout.addWidget(QLabel("Centroide Y:"), 3, 0)
+        self._det_y = QLabel("---")
+        detection_layout.addWidget(self._det_y, 3, 1)
+        
+        layout.addWidget(detection_group)
+        
+        # Contadores
+        counters_group = QGroupBox("Contadores")
+        counters_group.setStyleSheet(system_group.styleSheet())
+        counters_layout = QGridLayout(counters_group)
+        
+        counters_layout.addWidget(QLabel("Detecções:"), 0, 0)
+        self._det_count = QLabel("0")
+        self._det_count.setStyleSheet("color: #00d4ff; font-weight: bold; font-size: 14px;")
+        counters_layout.addWidget(self._det_count, 0, 1)
+        
+        counters_layout.addWidget(QLabel("Ciclos:"), 1, 0)
+        self._cycle_count = QLabel("0")
+        self._cycle_count.setStyleSheet("color: #28a745; font-weight: bold; font-size: 14px;")
+        counters_layout.addWidget(self._cycle_count, 1, 1)
+        
+        counters_layout.addWidget(QLabel("Erros:"), 2, 0)
+        self._error_count = QLabel("0")
+        self._error_count.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 14px;")
+        counters_layout.addWidget(self._error_count, 2, 1)
+        
+        layout.addWidget(counters_group)
+        
+        layout.addStretch()
+    
+    @Slot(str)
+    def set_system_status(self, status: str) -> None:
+        """Define status do sistema."""
+        color_map = {
+            "RUNNING": "green",
+            "PAUSED": "yellow",
+            "STOPPED": "gray",
+            "ERROR": "red",
+        }
+        self._system_status.set_status(status, color_map.get(status, "gray"))
+    
+    @Slot(bool)
+    def set_stream_running(self, running: bool) -> None:
+        """Define status do stream."""
+        if running:
+            self._stream_status.set_status("Ativo", "green")
+        else:
+            self._stream_status.set_status("Parado", "gray")
+    
+    @Slot(bool)
+    def set_inference_running(self, running: bool) -> None:
+        """Define status da inferência."""
+        if running:
+            self._inference_status.set_status("Ativo", "green")
+        else:
+            self._inference_status.set_status("Parado", "gray")
+    
+    @Slot(object)
+    def set_connection_state(self, state: ConnectionState) -> None:
+        """Define estado da conexão CLP."""
+        status_map = {
+            ConnectionStatus.CONNECTED: ("Conectado", "green"),
+            ConnectionStatus.SIMULATED: ("Simulado", "blue"),
+            ConnectionStatus.CONNECTING: ("Conectando...", "yellow"),
+            ConnectionStatus.DISCONNECTED: ("Desconectado", "gray"),
+            ConnectionStatus.DEGRADED: ("Degradado", "yellow"),
+            ConnectionStatus.ERROR: ("Erro", "red"),
+        }
+        status, color = status_map.get(state.status, ("Desconhecido", "gray"))
+        self._plc_status.set_status(status, color)
+    
+    @Slot(str)
+    def set_robot_state(self, state: str) -> None:
+        """Define estado do robô."""
+        color_map = {
+            "DETECTING": "green",
+            "SENDING_DATA": "green",
+            "WAITING_ACK": "yellow",
+            "WAITING_PICK": "yellow",
+            "WAITING_PLACE": "yellow",
+            "READY_FOR_NEXT": "green",
+            "ERROR": "red",
+            "TIMEOUT": "red",
+            "SAFETY_BLOCKED": "red",
+            "STOPPED": "gray",
+        }
+        self._robot_state.set_status(state, color_map.get(state, "gray"))
+    
+    @Slot(object)
+    def update_detection(self, event: DetectionEvent) -> None:
+        """Atualiza informações da detecção."""
+        if event.detected:
+            self._det_class.setText(event.class_name)
+            self._det_confidence.setText(f"{event.confidence:.1%}")
+            self._det_x.setText(f"{event.centroid[0]:.1f}")
+            self._det_y.setText(f"{event.centroid[1]:.1f}")
+        else:
+            self._det_class.setText("---")
+            self._det_confidence.setText("---")
+            self._det_x.setText("---")
+            self._det_y.setText("---")
+    
+    def set_detection_count(self, count: int) -> None:
+        """Define contador de detecções."""
+        self._det_count.setText(str(count))
+    
+    def set_cycle_count(self, count: int) -> None:
+        """Define contador de ciclos."""
+        self._cycle_count.setText(str(count))
+    
+    def set_error_count(self, count: int) -> None:
+        """Define contador de erros."""
+        self._error_count.setText(str(count))

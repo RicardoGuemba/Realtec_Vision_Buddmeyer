@@ -1,0 +1,69 @@
+# === Ambiente virtual ===
+venv/
+.venv/
+env/
+.env/
+
+# === Logs ===
+logs/
+*.log
+buddmeyer_vision_v2/logs/*.log
+
+# === Build e distribuição (installer) ===
+buddmeyer_vision_v2/installer/build/
+buddmeyer_vision_v2/installer/dist/
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# === Vídeo (exemplos/testes) ===
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# === Modelos de visão computacional (binários pesados) ===
+buddmeyer_vision_v2/models/*.safetensors
+buddmeyer_vision_v2/models/*.pt
+buddmeyer_vision_v2/models/*.pth
+buddmeyer_vision_v2/models/*.onnx
+buddmeyer_vision_v2/models/*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# === Datasets ===
+datasets/
+**/datasets/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.manifest
+*.spec.bak
+
+# === IDE e editor ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Sistema operacional ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Variáveis de ambiente e segredos ===
+.env
+.env.local
+*.pem
+
+# === PyInstaller / empacotamento ===
+*.spec.bak

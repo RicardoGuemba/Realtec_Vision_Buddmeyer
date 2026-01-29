@@ -1,0 +1,42 @@
+# Buddmeyer Vision System v2.0
+# Dependências Python
+# ====================
+
+# Interface Gráfica
+PySide6>=6.6.0
+
+# Configuração
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+pyyaml>=6.0.0
+
+# Machine Learning / Deep Learning (DETR/RT-DETR)
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.38.0
+accelerate>=0.27.0
+safetensors>=0.4.0
+
+# Processamento de Imagem
+opencv-python>=4.9.0
+Pillow>=10.2.0
+numpy>=1.24.0
+
+# Comunicação CLP (Omron NX102)
+aphyt>=2.1.9
+
+# Logging Estruturado
+structlog>=24.1.0
+colorama>=0.4.6
+
+# Integração Async/Qt
+qasync>=0.27.0
+
+# Gráficos (opcional)
+matplotlib>=3.8.0
+
+# Desenvolvimento (opcional)
+# pytest>=8.0.0
+# pytest-qt>=4.3.0
+# black>=24.1.0
+# ruff>=0.2.0
