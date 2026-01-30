@@ -71,9 +71,19 @@ class CIPSettings(BaseModel):
     connection_timeout: float = Field(default=10.0, ge=1.0, description="Timeout de conexão (s)")
     timeout_ms: int = Field(default=10000, ge=1000, description="Timeout de operação (ms)")
     retry_interval: float = Field(default=2.0, ge=0.5, description="Intervalo de reconexão (s)")
-    max_retries: int = Field(default=3, ge=0, description="Máximo de tentativas")
+    max_retries: int = Field(default=3, ge=0, description="Máximo de tentativas de conexão")
+    io_retries: int = Field(default=2, ge=0, le=5, description="Tentativas de leitura/escrita por operação")
     simulated: bool = Field(default=False, description="Modo simulado")
     heartbeat_interval: float = Field(default=1.0, ge=0.1, description="Intervalo de heartbeat (s)")
+    auto_reconnect: bool = Field(default=True, description="Reconexão automática quando degradado/desconectado")
+
+
+class RobotControlSettings(BaseModel):
+    """Configurações da máquina de estados do controle robô/CLP."""
+    
+    ack_timeout: float = Field(default=5.0, ge=1.0, description="Timeout para ACK do robô (s)")
+    pick_timeout: float = Field(default=30.0, ge=5.0, description="Timeout para pick (s)")
+    place_timeout: float = Field(default=30.0, ge=5.0, description="Timeout para place (s)")
 
 
 class TagSettings(BaseModel):
@@ -143,6 +153,7 @@ class Settings(BaseSettings):
     detection: DetectionSettings = Field(default_factory=DetectionSettings)
     preprocess: PreprocessSettings = Field(default_factory=PreprocessSettings)
     cip: CIPSettings = Field(default_factory=CIPSettings)
+    robot_control: RobotControlSettings = Field(default_factory=RobotControlSettings)
     tags: TagSettings = Field(default_factory=TagSettings)
     output: OutputSettings = Field(default_factory=OutputSettings)
     

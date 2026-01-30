@@ -16,6 +16,7 @@ from PySide6.QtGui import QFont, QKeySequence, QShortcut
 
 from config import get_settings
 from core.logger import get_logger
+from core.metrics import MetricsCollector
 from streaming import StreamManager
 from detection import InferenceEngine
 from communication import CIPClient
@@ -368,7 +369,7 @@ class OperationPage(QWidget):
         self._status_panel.set_system_status("RUNNING")
     
     async def _connect_plc_and_start_robot(self) -> None:
-        """Conecta ao CLP e inicia controlador de robô."""
+        """Conecta ao CLP, seta VisionReady e inicia controlador de robô."""
         try:
             # Tenta conectar ao CLP
             connected = await self._cip_client.connect()
@@ -377,6 +378,14 @@ class OperationPage(QWidget):
                 self._event_console.add_success("Conectado ao CLP")
             else:
                 self._event_console.add_warning("CLP em modo simulado")
+            
+            # Seta VisionReady = True antes de iniciar o controlador
+            if self._cip_client._state.is_connected:
+                try:
+                    await self._cip_client.set_vision_ready(True)
+                    self._event_console.add_info("VisionReady = True enviado ao CLP")
+                except Exception as e:
+                    self._logger.warning("failed_to_set_vision_ready", error=str(e))
             
             # Inicia controlador de robô apenas se conectado (ou simulado)
             if self._cip_client._state.is_connected:
@@ -405,13 +414,21 @@ class OperationPage(QWidget):
         """
         Comunica as coordenadas do centroide ao CLP.
         
-        Chamado a cada 25 frames para simulação.
+        Chamado a cada 25 frames.
         Usa as TAGs definidas: CENTROID_X, CENTROID_Y, CONFIDENCE, etc.
+        Inclui handshake básico: só envia se CLP conectado e visão OK.
         """
         if self._last_best_detection is None:
             return
         
+        # Handshake básico: verifica estado do CLP
         if not self._cip_client._state.is_connected:
+            self._logger.debug("skipping_centroid_plc_not_connected")
+            return
+        
+        # Verifica se está em modo saudável (não degradado)
+        if self._cip_client._state.status.value == "degraded":
+            self._logger.debug("skipping_centroid_plc_degraded")
             return
         
         detection = self._last_best_detection
@@ -426,6 +443,7 @@ class OperationPage(QWidget):
             centroid_x=centroid_x,
             centroid_y=centroid_y,
             confidence=confidence,
+            plc_status=self._cip_client._state.status.value,
         )
         
         # Mensagem no console (a cada 25 frames para não poluir)
@@ -452,7 +470,12 @@ class OperationPage(QWidget):
         processing_time: float,
     ) -> None:
         """
-        Envia dados de detecção ao CLP via TAGs.
+        Envia dados de detecção ao CLP via TAGs com handshake básico.
+        
+        Handshake:
+        1. Verifica se CLP está conectado
+        2. (Opcional) Lê RobotReady para confirmar que CLP aceita dados
+        3. Escreve as TAGs de detecção
         
         TAGs utilizadas:
         - PRODUCT_DETECTED: bool
@@ -463,6 +486,22 @@ class OperationPage(QWidget):
         - PROCESSING_TIME: float
         """
         try:
+            # Checagem de status antes de enviar
+            if not self._cip_client._state.is_connected:
+                self._logger.debug("send_detection_skipped_not_connected")
+                return
+            
+            # Handshake: tenta ler RobotReady (se falhar, continua mesmo assim)
+            robot_ready = True  # Default para modo simulado ou se leitura falhar
+            try:
+                robot_ready = await self._cip_client.read_tag("RobotReady")
+            except Exception:
+                pass  # Em modo simulado ou erro de leitura, assume ready
+            
+            if not robot_ready:
+                self._logger.debug("send_detection_skipped_robot_not_ready")
+                return
+            
             # Usa o método write_detection_result do CIPClient
             await self._cip_client.write_detection_result(
                 detected=True,
@@ -477,10 +516,23 @@ class OperationPage(QWidget):
                 "detection_sent_to_plc",
                 centroid_x=centroid_x,
                 centroid_y=centroid_y,
+                robot_ready=robot_ready,
             )
             
         except Exception as e:
             self._logger.warning("failed_to_send_detection", error=str(e))
+            self._status_panel.set_last_error(str(e))
+    
+    async def _shutdown_plc_connection(self) -> None:
+        """Seta VisionReady = False e desconecta do CLP."""
+        try:
+            if self._cip_client._state.is_connected:
+                await self._cip_client.set_vision_ready(False)
+                self._logger.info("vision_ready_false_sent")
+        except Exception as e:
+            self._logger.warning("failed_to_set_vision_ready_false", error=str(e))
+        finally:
+            await self._cip_client.disconnect()
     
     @Slot()
     def _stop_system(self) -> None:
@@ -495,8 +547,8 @@ class OperationPage(QWidget):
         self._inference_engine.stop()
         self._stream_manager.stop()
         
-        # Desconecta CLP
-        asyncio.create_task(self._cip_client.disconnect())
+        # Seta VisionReady = False e desconecta CLP
+        asyncio.create_task(self._shutdown_plc_connection())
         
         self._is_running = False
         self._update_ui_state()
@@ -630,10 +682,12 @@ class OperationPage(QWidget):
         pass
     
     def _update_fps(self) -> None:
-        """Atualiza FPS no widget de vídeo."""
+        """Atualiza FPS no widget de vídeo e latência CIP no painel (RF-06)."""
         if self._stream_manager.is_running:
             fps = self._stream_manager.get_fps()
             self._video_widget.set_fps(fps)
+        latency_ms = MetricsCollector().get_last_value("cip_response_time")
+        self._status_panel.set_latency_ms(latency_ms)
     
     @Slot()
     def _on_stream_started(self) -> None:
@@ -687,10 +741,12 @@ class OperationPage(QWidget):
     
     @Slot(str)
     def _on_cip_error(self, error: str) -> None:
-        """Handler para erro CIP."""
+        """Handler para erro CIP (RF-06: último erro na UI)."""
         self._event_console.add_error(f"Erro CIP: {error}", "CLP")
+        self._status_panel.set_last_error(error)
     
     @Slot(str)
     def _on_robot_error(self, error: str) -> None:
-        """Handler para erro do robô."""
+        """Handler para erro do robô (RF-06: último erro na UI)."""
         self._event_console.add_error(f"Erro do robô: {error}", "Robô")
+        self._status_panel.set_last_error(error)

@@ -282,10 +282,13 @@ class CIPClient(QObject):
         if self._plc is not None:
             try:
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    self._executor,
-                    self._plc.close,
-                )
+                # NSeries da aphyt não tem método close(); tenta close_explicit se existir
+                close_method = getattr(self._plc, "close_explicit", None)
+                if close_method is None:
+                    close_method = getattr(self._plc, "close", None)
+                if close_method is not None and callable(close_method):
+                    await loop.run_in_executor(self._executor, close_method)
+                # Se não houver método, apenas descarta a referência
             except Exception as e:
                 logger.warning("cip_disconnect_error", error=str(e))
             finally:
@@ -319,31 +322,38 @@ class CIPClient(QObject):
             raise CIPTagError(f"TAG não pode ser lido: {logical_name}")
         
         plc_name = self._tag_map.get_plc_name(logical_name)
-        start_time = time.perf_counter()
+        io_retries = getattr(self._settings.cip, "io_retries", 0) or 0
+        max_attempts = 1 + io_retries
         
-        try:
-            if self._simulated_plc:
-                value = self._simulated_plc.read_variable(plc_name)
-            else:
-                loop = asyncio.get_event_loop()
-                value = await loop.run_in_executor(
-                    self._executor,
-                    self._plc.read_variable,
-                    plc_name,
-                )
-            
-            duration = (time.perf_counter() - start_time) * 1000
-            self._cip_logger.log_read(plc_name, value, True, duration_ms=duration)
-            self._metrics.record("cip_response_time", duration)
-            
-            self.tag_read.emit(logical_name, value)
-            return value
-            
-        except Exception as e:
-            duration = (time.perf_counter() - start_time) * 1000
-            self._cip_logger.log_read(plc_name, None, False, str(e), duration)
-            self._handle_error(str(e), tag_name=plc_name)
-            raise CIPTagError(f"Erro ao ler TAG {logical_name}: {e}")
+        for attempt in range(max_attempts):
+            start_time = time.perf_counter()
+            try:
+                if self._simulated_plc:
+                    value = self._simulated_plc.read_variable(plc_name)
+                else:
+                    loop = asyncio.get_event_loop()
+                    value = await loop.run_in_executor(
+                        self._executor,
+                        self._plc.read_variable,
+                        plc_name,
+                    )
+                
+                duration = (time.perf_counter() - start_time) * 1000
+                self._cip_logger.log_read(plc_name, value, True, duration_ms=duration)
+                self._metrics.record("cip_response_time", duration)
+                
+                self.tag_read.emit(logical_name, value)
+                return value
+                
+            except Exception as e:
+                duration = (time.perf_counter() - start_time) * 1000
+                self._cip_logger.log_read(plc_name, None, False, str(e), duration)
+                if attempt < max_attempts - 1:
+                    logger.warning("cip_read_retry", tag=plc_name, attempt=attempt + 1, error=str(e))
+                    await asyncio.sleep(0.2)
+                else:
+                    self._handle_error(str(e), tag_name=plc_name)
+                    raise CIPTagError(f"Erro ao ler TAG {logical_name}: {e}")
     
     async def write_tag(self, logical_name: str, value: Any) -> bool:
         """
@@ -370,32 +380,39 @@ class CIPClient(QObject):
             raise CIPTagError(f"Valor inválido para TAG {logical_name}: {value}")
         
         plc_name = self._tag_map.get_plc_name(logical_name)
-        start_time = time.perf_counter()
+        io_retries = getattr(self._settings.cip, "io_retries", 0) or 0
+        max_attempts = 1 + io_retries
         
-        try:
-            if self._simulated_plc:
-                self._simulated_plc.write_variable(plc_name, value)
-            else:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    self._executor,
-                    self._plc.write_variable,
-                    plc_name,
-                    value,
-                )
-            
-            duration = (time.perf_counter() - start_time) * 1000
-            self._cip_logger.log_write(plc_name, value, True, duration_ms=duration)
-            self._metrics.record("cip_response_time", duration)
-            
-            self.tag_written.emit(logical_name, value)
-            return True
-            
-        except Exception as e:
-            duration = (time.perf_counter() - start_time) * 1000
-            self._cip_logger.log_write(plc_name, value, False, str(e), duration)
-            self._handle_error(str(e), tag_name=plc_name)
-            raise CIPTagError(f"Erro ao escrever TAG {logical_name}: {e}")
+        for attempt in range(max_attempts):
+            start_time = time.perf_counter()
+            try:
+                if self._simulated_plc:
+                    self._simulated_plc.write_variable(plc_name, value)
+                else:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        self._executor,
+                        self._plc.write_variable,
+                        plc_name,
+                        value,
+                    )
+                
+                duration = (time.perf_counter() - start_time) * 1000
+                self._cip_logger.log_write(plc_name, value, True, duration_ms=duration)
+                self._metrics.record("cip_response_time", duration)
+                
+                self.tag_written.emit(logical_name, value)
+                return True
+                
+            except Exception as e:
+                duration = (time.perf_counter() - start_time) * 1000
+                self._cip_logger.log_write(plc_name, value, False, str(e), duration)
+                if attempt < max_attempts - 1:
+                    logger.warning("cip_write_retry", tag=plc_name, attempt=attempt + 1, error=str(e))
+                    await asyncio.sleep(0.2)
+                else:
+                    self._handle_error(str(e), tag_name=plc_name)
+                    raise CIPTagError(f"Erro ao escrever TAG {logical_name}: {e}")
     
     async def write_detection_result(
         self,
@@ -487,8 +504,44 @@ class CIPClient(QObject):
         # Marca como degradado se muitos erros
         if self._state.error_count > 5 and self._state.status == ConnectionStatus.CONNECTED:
             self._update_state(ConnectionStatus.DEGRADED)
+            if getattr(self._settings.cip, "auto_reconnect", True):
+                self._schedule_reconnect()
         
         self.connection_error.emit(error)
+    
+    def _schedule_reconnect(self) -> None:
+        """Agenda tentativa de reconexão após retry_interval (RNF-02)."""
+        if self._reconnect_timer is not None:
+            return
+        interval_ms = int(self._settings.cip.retry_interval * 1000)
+        self._reconnect_timer = QTimer(self)
+        self._reconnect_timer.setSingleShot(True)
+        self._reconnect_timer.timeout.connect(self._on_reconnect_timer)
+        self._reconnect_timer.start(interval_ms)
+        logger.info("cip_reconnect_scheduled", interval_s=self._settings.cip.retry_interval)
+    
+    def _on_reconnect_timer(self) -> None:
+        """Tentativa de reconexão (chamado pelo timer)."""
+        if self._reconnect_timer is not None:
+            self._reconnect_timer.stop()
+            self._reconnect_timer.deleteLater()
+            self._reconnect_timer = None
+        if not self._state.is_connected and self._state.status != ConnectionStatus.CONNECTING:
+            asyncio.create_task(self._try_reconnect())
+    
+    async def _try_reconnect(self) -> None:
+        """Desconecta e tenta reconectar (usado por reconexão automática)."""
+        self._reconnect_attempts += 1
+        max_attempts = self._settings.cip.max_retries
+        if self._reconnect_attempts > max_attempts:
+            logger.warning("cip_reconnect_abandoned", attempts=self._reconnect_attempts)
+            return
+        await self.disconnect()
+        await asyncio.sleep(0.5)
+        await self.connect()
+        if self._state.is_connected:
+            self._reconnect_attempts = 0
+            logger.info("cip_reconnect_ok")
     
     def _start_heartbeat(self) -> None:
         """Inicia heartbeat."""

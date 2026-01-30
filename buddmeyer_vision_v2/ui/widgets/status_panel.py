@@ -151,6 +151,18 @@ class StatusPanel(QWidget):
         self._robot_state = StatusIndicator("Estado")
         plc_layout.addWidget(self._robot_state)
         
+        plc_layout.addWidget(QLabel("Último erro:"))
+        self._last_error = QLabel("—")
+        self._last_error.setStyleSheet("color: #dc3545; font-size: 11px;")
+        self._last_error.setWordWrap(True)
+        self._last_error.setMaximumHeight(36)
+        plc_layout.addWidget(self._last_error)
+        
+        plc_layout.addWidget(QLabel("Latência CIP:"))
+        self._latency_ms = QLabel("— ms")
+        self._latency_ms.setStyleSheet("color: #00d4ff;")
+        plc_layout.addWidget(self._latency_ms)
+        
         layout.addWidget(plc_group)
         
         # Última Detecção
@@ -285,3 +297,17 @@ class StatusPanel(QWidget):
     def set_error_count(self, count: int) -> None:
         """Define contador de erros."""
         self._error_count.setText(str(count))
+    
+    def set_last_error(self, error: str) -> None:
+        """Define último erro exibido (RF-06: UI informativa)."""
+        if not error:
+            self._last_error.setText("—")
+        else:
+            self._last_error.setText(error[:80] + ("…" if len(error) > 80 else ""))
+    
+    def set_latency_ms(self, ms: Optional[float]) -> None:
+        """Define latência CIP em ms (RF-06: latência aproximada)."""
+        if ms is None:
+            self._latency_ms.setText("— ms")
+        else:
+            self._latency_ms.setText(f"{ms:.0f} ms")

@@ -163,10 +163,10 @@ class RobotController(QObject):
         self._cycle_count = 0
         self._current_detection: Optional[DetectionEvent] = None
         
-        # Timeouts
-        self._ack_timeout = 5.0  # segundos
-        self._pick_timeout = 30.0
-        self._place_timeout = 30.0
+        # Timeouts (carregados do config; atualizados em start())
+        self._ack_timeout = self._settings.robot_control.ack_timeout
+        self._pick_timeout = self._settings.robot_control.pick_timeout
+        self._place_timeout = self._settings.robot_control.place_timeout
         
         # Timer para polling
         self._poll_timer: Optional[QTimer] = None
@@ -174,6 +174,9 @@ class RobotController(QObject):
         
         # Running flag
         self._is_running = False
+        
+        # Flag para serializar processamento (evita recursão/concorrência)
+        self._processing = False
     
     def start(self) -> bool:
         """
@@ -184,6 +187,11 @@ class RobotController(QObject):
         """
         if self._is_running:
             return True
+        
+        self._settings = get_settings()
+        self._ack_timeout = self._settings.robot_control.ack_timeout
+        self._pick_timeout = self._settings.robot_control.pick_timeout
+        self._place_timeout = self._settings.robot_control.place_timeout
         
         self._is_running = True
         self._transition_to(RobotControlState.INITIALIZING)
@@ -248,11 +256,18 @@ class RobotController(QObject):
         if not self._is_running:
             return
         
+        # Evita concorrência: só agenda nova tarefa se a anterior terminou
+        if self._processing:
+            return
+        
         # Executa lógica do estado atual
         asyncio.create_task(self._process_current_state())
     
     async def _process_current_state(self) -> None:
-        """Processa o estado atual."""
+        """Processa o estado atual (serializado via _processing flag)."""
+        if self._processing:
+            return
+        self._processing = True
         try:
             if self._state == RobotControlState.INITIALIZING:
                 await self._handle_initializing()
@@ -293,9 +308,15 @@ class RobotController(QObject):
         except Exception as e:
             logger.error("state_processing_error", state=self._state.value, error=str(e))
             self._handle_exception(str(e))
+        finally:
+            self._processing = False
     
     async def _handle_initializing(self) -> None:
-        """Inicialização do sistema."""
+        """Inicialização do sistema.
+        
+        Nota: VisionReady já foi setado na OperationPage antes de iniciar
+        o controlador, evitando chamadas duplicadas e concorrência.
+        """
         try:
             # Verifica se está conectado ao CLP
             if not self._cip_client._state.is_connected:
@@ -304,8 +325,9 @@ class RobotController(QObject):
                 await asyncio.sleep(0.5)
                 return
             
-            # Seta visão pronta
-            await self._cip_client.set_vision_ready(True)
+            # VisionReady já foi setado na OperationPage._connect_plc_and_start_robot()
+            # Apenas transiciona para aguardar autorização
+            logger.info("initialization_complete_waiting_authorization")
             self._transition_to(RobotControlState.WAITING_AUTHORIZATION)
         except Exception as e:
             logger.error("initialization_failed", error=str(e))
@@ -521,6 +543,7 @@ class RobotController(QObject):
                 return
         
         old_state = self._state
+        duration_s = (datetime.now() - self._state_enter_time).total_seconds()
         self._previous_state = old_state
         self._state = new_state
         self._state_enter_time = datetime.now()
@@ -529,6 +552,7 @@ class RobotController(QObject):
             "state_transition",
             from_state=old_state.value,
             to_state=new_state.value,
+            duration_s=round(duration_s, 2),
         )
         
         self.state_changed.emit(new_state.value)

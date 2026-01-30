@@ -27,8 +27,14 @@ cip:
   timeout_ms: 10000
   retry_interval: 2.0
   max_retries: 3
+  io_retries: 2
   simulated: false
   heartbeat_interval: 1.0
+  auto_reconnect: true
+robot_control:
+  ack_timeout: 5.0
+  pick_timeout: 30.0
+  place_timeout: 30.0
 tags:
   VisionReady: VisionCtrl_VisionReady
   VisionBusy: VisionCtrl_VisionBusy
