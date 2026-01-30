@@ -66,7 +66,7 @@ class PreprocessSettings(BaseModel):
 class CIPSettings(BaseModel):
     """Configurações de comunicação CIP."""
     
-    ip: str = Field(default="187.99.125.5", description="IP do CLP")
+    ip: str = Field(default="187.99.124.229", description="IP do CLP")
     port: int = Field(default=44818, description="Porta CIP")
     connection_timeout: float = Field(default=10.0, ge=1.0, description="Timeout de conexão (s)")
     timeout_ms: int = Field(default=10000, ge=1000, description="Timeout de operação (ms)")

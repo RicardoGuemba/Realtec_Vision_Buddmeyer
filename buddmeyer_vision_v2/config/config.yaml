@@ -21,7 +21,7 @@ preprocess:
   brightness: 0.0
   contrast: 0.0
 cip:
-  ip: 187.99.125.5
+  ip: 187.99.124.229
   port: 44818
   connection_timeout: 10.0
   timeout_ms: 10000
