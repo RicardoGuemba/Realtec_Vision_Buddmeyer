@@ -48,7 +48,7 @@ class StatusIndicator(QFrame):
         
         # Status
         self._status_label = QLabel("---")
-        self._status_label.setStyleSheet("color: #adb5bd;")
+        self._status_label.setStyleSheet("color: #adb5bd; font-size: 11px;")
         layout.addWidget(self._status_label)
     
     def set_status(self, status: str, color: str = "gray") -> None:
@@ -160,7 +160,7 @@ class StatusPanel(QWidget):
         
         plc_layout.addWidget(QLabel("Latência CIP:"))
         self._latency_ms = QLabel("— ms")
-        self._latency_ms.setStyleSheet("color: #00d4ff;")
+        self._latency_ms.setStyleSheet("color: #00d4ff; font-size: 11px;")
         plc_layout.addWidget(self._latency_ms)
         
         layout.addWidget(plc_group)
@@ -172,20 +172,22 @@ class StatusPanel(QWidget):
         
         detection_layout.addWidget(QLabel("Classe:"), 0, 0)
         self._det_class = QLabel("---")
-        self._det_class.setStyleSheet("color: #00d4ff; font-weight: bold;")
+        self._det_class.setStyleSheet("color: #00d4ff; font-weight: bold; font-size: 11px;")
         detection_layout.addWidget(self._det_class, 0, 1)
         
         detection_layout.addWidget(QLabel("Confiança:"), 1, 0)
         self._det_confidence = QLabel("---")
-        self._det_confidence.setStyleSheet("color: #28a745;")
+        self._det_confidence.setStyleSheet("color: #28a745; font-size: 11px;")
         detection_layout.addWidget(self._det_confidence, 1, 1)
         
         detection_layout.addWidget(QLabel("Centroide X:"), 2, 0)
         self._det_x = QLabel("---")
+        self._det_x.setStyleSheet("color: #e0e0e0; font-size: 11px;")
         detection_layout.addWidget(self._det_x, 2, 1)
         
         detection_layout.addWidget(QLabel("Centroide Y:"), 3, 0)
         self._det_y = QLabel("---")
+        self._det_y.setStyleSheet("color: #e0e0e0; font-size: 11px;")
         detection_layout.addWidget(self._det_y, 3, 1)
         
         layout.addWidget(detection_group)
@@ -259,11 +261,16 @@ class StatusPanel(QWidget):
     def set_robot_state(self, state: str) -> None:
         """Define estado do robô."""
         color_map = {
+            "INITIALIZING": "yellow",
+            "WAITING_AUTHORIZATION": "yellow",
             "DETECTING": "green",
+            "WAITING_SEND_AUTHORIZATION": "yellow",  # Modo manual: aguarda operador autorizar envio ao CLP
             "SENDING_DATA": "green",
             "WAITING_ACK": "yellow",
+            "ACK_CONFIRMED": "green",
             "WAITING_PICK": "yellow",
             "WAITING_PLACE": "yellow",
+            "WAITING_CYCLE_START": "yellow",
             "READY_FOR_NEXT": "green",
             "ERROR": "red",
             "TIMEOUT": "red",

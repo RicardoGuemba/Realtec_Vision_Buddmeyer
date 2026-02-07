@@ -26,11 +26,22 @@ logger = get_logger("cip.client")
 
 
 class SimulatedPLC:
-    """PLC simulado para desenvolvimento e testes."""
+    """
+    PLC simulado com ciclo completo de pick-and-place.
+    
+    Simula um robo conectado ao CLP que responde ao handshake:
+      1. Visao envia PRODUCT_DETECTED -> Robo responde ROBOT_ACK
+      2. Visao confirma EchoAck       -> Robo executa Pick (RobotPickComplete)
+      3. Apos Pick                     -> Robo executa Place (RobotPlaceComplete)
+      4. Apos Place                    -> CLP sinaliza ciclo (PlcCycleStart)
+      5. Visao envia ReadyForNext      -> Flags resetadas para novo ciclo
+    
+    Delays simulam tempos reais de movimentacao do robo.
+    """
     
     def __init__(self):
         self._tags: Dict[str, Any] = {
-            # TAGs de escrita
+            # TAGs de escrita (Visao -> CLP)
             "VisionCtrl_VisionReady": False,
             "VisionCtrl_VisionBusy": False,
             "VisionCtrl_VisionError": False,
@@ -46,7 +57,7 @@ class SimulatedPLC:
             "VisionCtrl_ReadyForNext": False,
             "SYSTEM_FAULT": False,
             
-            # TAGs de leitura
+            # TAGs de leitura (CLP/Robo -> Visao)
             "ROBOT_ACK": False,
             "ROBOT_READY": True,
             "ROBOT_ERROR": False,
@@ -61,42 +72,90 @@ class SimulatedPLC:
             "SystemStatus_Heartbeat": False,
             "SystemStatus_Mode": 1,
             
-            # TAGs de segurança
+            # TAGs de seguranca
             "Safety_GateClosed": True,
             "Safety_AreaClear": True,
             "Safety_LightCurtainOK": True,
             "Safety_EmergencyStop": True,
         }
         self._lock = Lock()
-        self._ack_delay = 1.5  # Segundos para auto-ACK
+        
+        # Delays simulados (segundos) — tempos tipicos de expedicao
+        self._ack_delay = 1.5       # Tempo para robo/CLP reconhecer deteccao
+        self._pick_delay = 4.0      # Tempo tipico de pick em expedicao
+        self._place_delay = 5.0     # Tempo tipico de place em expedicao
+        self._cycle_end_delay = 1.0 # Tempo para CLP sinalizar fim de ciclo
     
     def read_variable(self, name: str) -> Any:
-        """Lê valor de um TAG."""
+        """Le valor de um TAG."""
         with self._lock:
             return self._tags.get(name, 0)
     
     def write_variable(self, name: str, value: Any) -> None:
-        """Escreve valor em um TAG."""
+        """Escreve valor em um TAG e dispara simulacao de robo conforme handshake."""
         with self._lock:
             self._tags[name] = value
         
-        # Auto ACK após detecção
+        # --- Handshake reativo do robo simulado ---
+        
+        # Etapa 1: Visao detectou produto -> Robo envia ACK
         if name == "PRODUCT_DETECTED" and value:
-            threading.Timer(self._ack_delay, self._auto_ack).start()
+            logger.debug("sim_robot: produto detectado, enviando ACK em %.1fs", self._ack_delay)
+            threading.Timer(self._ack_delay, self._simulate_robot_ack).start()
+        
+        # Etapa 2: Visao confirmou ACK (EchoAck) -> Robo inicia Pick
+        elif name == "VisionCtrl_EchoAck" and value:
+            logger.debug("sim_robot: EchoAck recebido, executando PICK em %.1fs", self._pick_delay)
+            threading.Timer(self._pick_delay, self._simulate_pick_complete).start()
+        
+        # Etapa 5: Visao pronta para proximo ciclo -> Reset de flags
+        elif name == "VisionCtrl_ReadyForNext" and value:
+            logger.debug("sim_robot: ReadyForNext recebido, resetando flags")
+            self._reset_robot_flags()
     
-    def _auto_ack(self) -> None:
-        """Simula ACK automático do robô."""
+    def _simulate_robot_ack(self) -> None:
+        """Robo reconhece a deteccao (ACK)."""
         with self._lock:
             self._tags["ROBOT_ACK"] = True
-            logger.debug("simulated_robot_ack")
-        
-        # Reset após 1 segundo
-        threading.Timer(1.0, self._reset_ack).start()
+            self._tags["RobotStatus_Busy"] = True
+        logger.debug("sim_robot: ROBOT_ACK = True")
     
-    def _reset_ack(self) -> None:
-        """Reseta ACK."""
+    def _simulate_pick_complete(self) -> None:
+        """Robo concluiu o pick."""
+        with self._lock:
+            self._tags["RobotStatus_PickComplete"] = True
+        logger.debug("sim_robot: PickComplete = True, executando PLACE em %.1fs", self._place_delay)
+        # Apos pick, inicia place
+        threading.Timer(self._place_delay, self._simulate_place_complete).start()
+    
+    def _simulate_place_complete(self) -> None:
+        """Robo concluiu o place."""
+        with self._lock:
+            self._tags["RobotStatus_PlaceComplete"] = True
+            self._tags["RobotStatus_Busy"] = False
+        logger.debug("sim_robot: PlaceComplete = True, sinalizando ciclo em %.1fs", self._cycle_end_delay)
+        # Apos place, CLP sinaliza fim de ciclo
+        threading.Timer(self._cycle_end_delay, self._simulate_cycle_complete).start()
+    
+    def _simulate_cycle_complete(self) -> None:
+        """CLP sinaliza que o ciclo esta completo."""
+        with self._lock:
+            self._tags["RobotCtrl_CycleStart"] = True
+        logger.debug("sim_robot: CycleStart = True (ciclo completo)")
+    
+    def _reset_robot_flags(self) -> None:
+        """Reseta todas as flags do robo para novo ciclo."""
         with self._lock:
             self._tags["ROBOT_ACK"] = False
+            self._tags["RobotStatus_Busy"] = False
+            self._tags["RobotStatus_PickComplete"] = False
+            self._tags["RobotStatus_PlaceComplete"] = False
+            self._tags["RobotCtrl_CycleStart"] = False
+            self._tags["PRODUCT_DETECTED"] = False
+            self._tags["VisionCtrl_EchoAck"] = False
+            self._tags["VisionCtrl_DataSent"] = False
+            self._tags["VisionCtrl_ReadyForNext"] = False
+        logger.debug("sim_robot: flags resetadas para novo ciclo")
 
 
 class CIPClient(QObject):

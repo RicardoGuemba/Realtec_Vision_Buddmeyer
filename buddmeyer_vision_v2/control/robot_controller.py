@@ -7,7 +7,7 @@ import asyncio
 from enum import Enum
 from datetime import datetime
 from threading import Lock
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from PySide6.QtCore import QObject, Signal, QTimer
 
@@ -27,6 +27,7 @@ class RobotControlState(str, Enum):
     INITIALIZING = "INITIALIZING"
     WAITING_AUTHORIZATION = "WAITING_AUTHORIZATION"
     DETECTING = "DETECTING"
+    WAITING_SEND_AUTHORIZATION = "WAITING_SEND_AUTHORIZATION"  # Modo manual: aguarda operador autorizar envio ao CLP
     SENDING_DATA = "SENDING_DATA"
     WAITING_ACK = "WAITING_ACK"
     ACK_CONFIRMED = "ACK_CONFIRMED"
@@ -58,7 +59,13 @@ VALID_TRANSITIONS = {
     },
     RobotControlState.DETECTING: {
         RobotControlState.SENDING_DATA,
+        RobotControlState.WAITING_SEND_AUTHORIZATION,  # Modo manual: aguarda autorização para envio
         RobotControlState.WAITING_AUTHORIZATION,  # Nenhuma detecção
+        RobotControlState.ERROR,
+        RobotControlState.STOPPED,
+    },
+    RobotControlState.WAITING_SEND_AUTHORIZATION: {
+        RobotControlState.SENDING_DATA,
         RobotControlState.ERROR,
         RobotControlState.STOPPED,
     },
@@ -130,6 +137,8 @@ class RobotController(QObject):
     cycle_completed = Signal(int)  # Número do ciclo
     error_occurred = Signal(str)
     detection_sent = Signal(object)  # DetectionEvent
+    cycle_step = Signal(str)  # Descrição da etapa atual do ciclo
+    cycle_summary = Signal(list)  # Lista de dicts com etapas executadas
     
     _instance: Optional["RobotController"] = None
     _lock = Lock()
@@ -177,6 +186,60 @@ class RobotController(QObject):
         
         # Flag para serializar processamento (evita recursão/concorrência)
         self._processing = False
+        
+        # Modo de ciclo: "manual" (aguarda botão) ou "continuous" (auto)
+        self._cycle_mode: str = "manual"
+        
+        # Autorização do usuário para próximo ciclo (modo manual)
+        self._user_cycle_authorized: bool = False
+        
+        # Autorização do usuário para enviar coordenadas ao CLP (modo manual, após detecção)
+        self._user_send_authorized: bool = False
+        
+        # Registro de etapas do ciclo atual
+        self._cycle_steps: List[Dict[str, Any]] = []
+        
+        # Flag para controlar execução única de cleanup no READY_FOR_NEXT
+        self._ready_cleanup_done: bool = False
+    
+    def set_cycle_mode(self, mode: str) -> None:
+        """
+        Define o modo de ciclo.
+        
+        Args:
+            mode: "manual" ou "continuous"
+        """
+        if mode not in ("manual", "continuous"):
+            logger.warning("invalid_cycle_mode", mode=mode)
+            return
+        self._cycle_mode = mode
+        logger.info("cycle_mode_changed", mode=mode)
+    
+    def authorize_next_cycle(self) -> None:
+        """Autoriza o próximo ciclo (usado em modo manual)."""
+        self._user_cycle_authorized = True
+        logger.info("next_cycle_authorized_by_user")
+    
+    def authorize_send_to_plc(self) -> None:
+        """Autoriza o envio das coordenadas ao CLP após detecção (modo manual)."""
+        self._user_send_authorized = True
+        logger.info("send_to_plc_authorized_by_user")
+    
+    def _record_step(self, step_name: str) -> None:
+        """Registra uma etapa do ciclo atual e emite sinal."""
+        entry = {
+            "step": step_name,
+            "timestamp": datetime.now(),
+            "state": self._state.value,
+        }
+        self._cycle_steps.append(entry)
+        self.cycle_step.emit(step_name)
+        logger.info("cycle_step_recorded", step=step_name)
+    
+    @property
+    def cycle_mode(self) -> str:
+        """Retorna modo de ciclo atual."""
+        return self._cycle_mode
     
     def start(self) -> bool:
         """
@@ -246,7 +309,14 @@ class RobotController(QObject):
                 confidence=event.confidence,
                 centroid=event.centroid,
             )
-            self._transition_to(RobotControlState.SENDING_DATA)
+            self._record_step(
+                f"Embalagem detectada: {event.class_name} "
+                f"({event.confidence:.0%}) em ({event.centroid[0]:.0f}, {event.centroid[1]:.0f})"
+            )
+            if self._cycle_mode == "manual":
+                self._transition_to(RobotControlState.WAITING_SEND_AUTHORIZATION)
+            else:
+                self._transition_to(RobotControlState.SENDING_DATA)
         else:
             # Nenhuma detecção, continua aguardando
             logger.debug("no_detection")
@@ -274,6 +344,9 @@ class RobotController(QObject):
             
             elif self._state == RobotControlState.WAITING_AUTHORIZATION:
                 await self._handle_waiting_authorization()
+            
+            elif self._state == RobotControlState.WAITING_SEND_AUTHORIZATION:
+                await self._handle_waiting_send_authorization()
             
             elif self._state == RobotControlState.SENDING_DATA:
                 await self._handle_sending_data()
@@ -358,6 +431,13 @@ class RobotController(QObject):
         except Exception as e:
             logger.warning("authorization_check_error", error=str(e))
     
+    async def _handle_waiting_send_authorization(self) -> None:
+        """Aguarda operador autorizar envio das coordenadas ao CLP (modo manual)."""
+        if self._user_send_authorized:
+            self._user_send_authorized = False
+            logger.info("send_authorized_proceeding_to_send")
+            self._transition_to(RobotControlState.SENDING_DATA)
+    
     async def _handle_sending_data(self) -> None:
         """Envia dados de detecção para o CLP."""
         if self._current_detection is None:
@@ -383,6 +463,11 @@ class RobotController(QObject):
                 processing_time=plc_data["processing_time"],
             )
             
+            self._record_step(
+                f"Coordenadas enviadas ao CLP: "
+                f"({plc_data['centroid_x']:.0f}, {plc_data['centroid_y']:.0f}) "
+                f"conf={plc_data['confidence']:.0%}"
+            )
             self.detection_sent.emit(self._current_detection)
             self._transition_to(RobotControlState.WAITING_ACK)
             
@@ -404,6 +489,7 @@ class RobotController(QObject):
             
             if ack:
                 logger.info("robot_ack_received")
+                self._record_step("ACK do robo recebido")
                 self._transition_to(RobotControlState.ACK_CONFIRMED)
                 
         except Exception as e:
@@ -434,6 +520,7 @@ class RobotController(QObject):
             
             if pick_complete:
                 logger.info("pick_complete")
+                self._record_step("PICK concluido - embalagem coletada")
                 self._transition_to(RobotControlState.WAITING_PLACE)
                 
         except Exception as e:
@@ -453,42 +540,58 @@ class RobotController(QObject):
             
             if place_complete:
                 logger.info("place_complete")
+                self._record_step("PLACE concluido - embalagem posicionada")
                 self._transition_to(RobotControlState.WAITING_CYCLE_START)
                 
         except Exception as e:
             logger.warning("place_check_error", error=str(e))
     
     async def _handle_waiting_cycle_start(self) -> None:
-        """Aguarda comando para novo ciclo."""
+        """Aguarda CLP sinalizar fim de ciclo, faz cleanup e emite summary."""
         try:
             cycle_start = await self._cip_client.read_tag("PlcCycleStart")
             
             if cycle_start:
                 logger.info("cycle_start_received")
+                self._record_step("Ciclo pick-and-place COMPLETO")
+                
                 self._cycle_count += 1
                 self.cycle_completed.emit(self._cycle_count)
                 self._metrics.increment("cycle_count")
+                
+                # Emite resumo do ciclo para a UI
+                self.cycle_summary.emit(self._cycle_steps.copy())
+                self._cycle_steps.clear()
+                
+                # Reseta flags no CLP
+                try:
+                    await self._cip_client.set_vision_echo_ack(False)
+                    await self._cip_client.set_ready_for_next(True)
+                except Exception as e:
+                    logger.warning("cycle_cleanup_flags_error", error=str(e))
+                
+                # Limpa detecção atual
+                self._current_detection = None
+                self._ready_cleanup_done = False
+                
                 self._transition_to(RobotControlState.READY_FOR_NEXT)
                 
         except Exception as e:
             logger.warning("cycle_start_check_error", error=str(e))
     
     async def _handle_ready_for_next(self) -> None:
-        """Prepara para próximo ciclo."""
-        try:
-            # Reseta flags
-            await self._cip_client.set_vision_echo_ack(False)
-            await self._cip_client.set_ready_for_next(True)
-            
-            # Limpa detecção atual
-            self._current_detection = None
-            
-            # Volta a aguardar autorização
+        """
+        Prepara para próximo ciclo.
+        
+        Em modo contínuo: avança automaticamente.
+        Em modo manual: aguarda authorize_next_cycle() do usuário.
+        """
+        if self._cycle_mode == "continuous":
             self._transition_to(RobotControlState.WAITING_AUTHORIZATION)
-            
-        except Exception as e:
-            logger.error("ready_for_next_failed", error=str(e))
-            self._handle_exception(str(e))
+        elif self._user_cycle_authorized:
+            self._user_cycle_authorized = False
+            self._transition_to(RobotControlState.WAITING_AUTHORIZATION)
+        # else: permanece em READY_FOR_NEXT aguardando autorização do usuário
     
     async def _handle_error(self) -> None:
         """Estado de erro."""

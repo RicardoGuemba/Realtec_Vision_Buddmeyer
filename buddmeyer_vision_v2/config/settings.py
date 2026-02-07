@@ -16,9 +16,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class StreamingSettings(BaseModel):
     """Configurações de streaming de vídeo."""
     
-    source_type: str = Field(default="video", description="Tipo: video, usb, rtsp, gige")
+    source_type: str = Field(default="usb", description="Tipo: video, usb, rtsp, gige. Padrão: usb (câmera na porta USB).")
     video_path: str = Field(default="videos/test.mp4", description="Caminho do arquivo de vídeo")
-    usb_camera_index: int = Field(default=0, description="Índice da câmera USB")
+    usb_camera_index: int = Field(default=0, description="Índice da câmera USB (0 = primeira câmera)")
     rtsp_url: str = Field(default="", description="URL do stream RTSP")
     gige_ip: str = Field(default="", description="IP da câmera GigE")
     gige_port: int = Field(default=3956, description="Porta da câmera GigE")

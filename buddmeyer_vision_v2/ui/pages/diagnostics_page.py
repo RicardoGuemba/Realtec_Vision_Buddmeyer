@@ -5,6 +5,7 @@ Página de Diagnósticos - Métricas e logs do sistema.
 
 import platform
 import sys
+import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
@@ -14,6 +15,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QColor
 import torch
+
+try:
+    import psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _HAS_PSUTIL = False
 
 from config import get_settings
 from core.metrics import MetricsCollector
@@ -382,3 +389,35 @@ class DiagnosticsPage(QWidget):
         else:
             self._health_banner.setStyleSheet("QFrame { background-color: #6c757d; border-radius: 4px; }")
             self._health_label.setText("○ Sistema parado")
+        
+        # Recursos do sistema (aba Sistema)
+        self._update_resource_usage()
+    
+    def _update_resource_usage(self) -> None:
+        """Atualiza indicadores de uso de CPU, memória e GPU."""
+        if _HAS_PSUTIL:
+            try:
+                # CPU do processo atual
+                process = psutil.Process(os.getpid())
+                cpu_percent = process.cpu_percent(interval=None)
+                self._cpu_label.setText(f"{cpu_percent:.1f}%")
+                
+                # Memória do processo atual
+                mem_info = process.memory_info()
+                mem_mb = mem_info.rss / (1024 * 1024)
+                self._memory_label.setText(f"{mem_mb:.0f} MB")
+            except Exception:
+                self._cpu_label.setText("N/A")
+                self._memory_label.setText("N/A")
+        else:
+            self._cpu_label.setText("psutil não instalado")
+            self._memory_label.setText("psutil não instalado")
+        
+        # GPU (via PyTorch CUDA)
+        if torch.cuda.is_available() and hasattr(self, "_gpu_label"):
+            try:
+                allocated = torch.cuda.memory_allocated(0) / (1024 * 1024)
+                reserved = torch.cuda.memory_reserved(0) / (1024 * 1024)
+                self._gpu_label.setText(f"{allocated:.0f} MB alocado / {reserved:.0f} MB reservado")
+            except Exception:
+                self._gpu_label.setText("N/A")

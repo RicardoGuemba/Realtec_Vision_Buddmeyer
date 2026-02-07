@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QPushButton, QComboBox, QLabel, QFileDialog,
-    QSplitter, QGroupBox
+    QSplitter, QGroupBox, QCheckBox
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
@@ -54,6 +54,8 @@ class OperationPage(QWidget):
         self._frame_count = 0
         self._communication_interval = 25  # Comunicar a cada 25 frames
         self._last_best_detection = None  # Armazena última melhor detecção
+        self._detection_count = 0  # Contador total de detecções
+        self._error_count = 0  # Contador total de erros
         
         self._setup_ui()
         self._sync_combo_to_settings()
@@ -80,6 +82,12 @@ class OperationPage(QWidget):
         self._video_widget.double_clicked.connect(self._toggle_fullscreen)
         central_layout.addWidget(self._video_widget, stretch=3)
         
+        # Legenda da fonte atual (abaixo do vídeo)
+        self._source_caption = QLabel()
+        self._source_caption.setStyleSheet("color: #8b9dc3; font-size: 11px; padding: 2px 0;")
+        self._source_caption.setAlignment(Qt.AlignCenter)
+        central_layout.addWidget(self._source_caption)
+        
         # Console de eventos
         console_group = QGroupBox("Eventos")
         console_group.setStyleSheet("""
@@ -97,6 +105,7 @@ class OperationPage(QWidget):
         """)
         console_layout = QVBoxLayout(console_group)
         self._event_console = EventConsole()
+        self._event_console.setMinimumHeight(140)
         console_layout.addWidget(self._event_console)
         central_layout.addWidget(console_group, stretch=1)
         
@@ -110,6 +119,27 @@ class OperationPage(QWidget):
         main_splitter.setSizes([800, 280])
         
         layout.addWidget(main_splitter, stretch=1)
+        
+        # Barra de status da etapa atual (pick-and-place)
+        status_bar = QFrame()
+        status_bar.setStyleSheet("""
+            QFrame {
+                background-color: #252d3a;
+                border: 1px solid #3d4852;
+                border-radius: 4px;
+            }
+        """)
+        status_bar.setMinimumHeight(44)
+        status_bar_layout = QHBoxLayout(status_bar)
+        status_bar_layout.setContentsMargins(12, 8, 12, 8)
+        status_label = QLabel("Status atual:")
+        status_label.setStyleSheet("color: #adb5bd; font-size: 11px; font-weight: bold;")
+        status_bar_layout.addWidget(status_label)
+        self._status_step_label = QLabel("—")
+        self._status_step_label.setStyleSheet("color: #00d4ff; font-weight: bold; font-size: 11px;")
+        self._status_step_label.setWordWrap(True)
+        status_bar_layout.addWidget(self._status_step_label, stretch=1)
+        layout.addWidget(status_bar)
         
         # Barra de controles (inferior)
         controls_frame = QFrame()
@@ -208,16 +238,94 @@ class OperationPage(QWidget):
         self._stop_btn.clicked.connect(self._stop_system)
         controls_layout.addWidget(self._stop_btn)
         
+        # Separador visual
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setStyleSheet("background-color: #3d4852;")
+        controls_layout.addWidget(sep)
+        
+        # Autorizar envio ao CLP (modo manual, apos deteccao)
+        self._authorize_send_btn = QPushButton("Autorizar envio ao CLP")
+        self._authorize_send_btn.setMinimumWidth(140)
+        self._authorize_send_btn.setEnabled(False)
+        self._authorize_send_btn.setVisible(False)
+        self._authorize_send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                font-weight: bold;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+            }
+        """)
+        self._authorize_send_btn.setToolTip("Objeto detectado. Clique para enviar coordenadas ao CLP e iniciar o ciclo.")
+        self._authorize_send_btn.clicked.connect(self._authorize_send_to_plc)
+        controls_layout.addWidget(self._authorize_send_btn)
+        
+        # Controles de ciclo pick-and-place
+        self._continuous_cb = QCheckBox("Modo Continuo")
+        self._continuous_cb.setChecked(False)
+        self._continuous_cb.setToolTip(
+            "Marcado: ciclos de pick-and-place executam automaticamente.\n"
+            "Desmarcado: aguarda 'Novo Ciclo' ao final de cada ciclo."
+        )
+        self._continuous_cb.stateChanged.connect(self._on_cycle_mode_changed)
+        controls_layout.addWidget(self._continuous_cb)
+        
+        self._new_cycle_btn = QPushButton("Novo Ciclo")
+        self._new_cycle_btn.setMinimumWidth(100)
+        self._new_cycle_btn.setEnabled(False)
+        self._new_cycle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007bff;
+                color: white;
+                font-weight: bold;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #0069d9;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+            }
+        """)
+        self._new_cycle_btn.setToolTip("Autoriza o proximo ciclo de pick-and-place (modo manual)")
+        self._new_cycle_btn.clicked.connect(self._authorize_new_cycle)
+        controls_layout.addWidget(self._new_cycle_btn)
+        
         layout.addWidget(controls_frame)
     
     def _sync_combo_to_settings(self) -> None:
         """Sincroniza o combo de fonte com o source_type do settings."""
         source_type_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3}
         current_source = self._settings.streaming.source_type
-        combo_index = source_type_map.get(current_source, 0)
+        combo_index = source_type_map.get(current_source, 1)  # 1 = usb como padrão
         self._source_combo.setCurrentIndex(combo_index)
         # Atualiza visibilidade do botão de seleção de arquivo
         self._source_path_btn.setVisible(combo_index == 0)
+        self._update_source_caption()
+    
+    def _update_source_caption(self) -> None:
+        """Atualiza a legenda da fonte atual (abaixo do vídeo)."""
+        idx = self._source_combo.currentIndex()
+        if idx == 0:
+            path = self._settings.streaming.video_path or "—"
+            name = Path(path).name if path != "—" else path
+            self._source_caption.setText(f"Fonte: Arquivo de vídeo — {name}")
+        elif idx == 1:
+            cam = self._settings.streaming.usb_camera_index
+            self._source_caption.setText(f"Fonte: Câmera USB (índice {cam})")
+        elif idx == 2:
+            self._source_caption.setText("Fonte: Stream RTSP")
+        else:
+            self._source_caption.setText("Fonte: Câmera GigE")
     
     def _connect_signals(self) -> None:
         """Conecta os sinais."""
@@ -238,8 +346,11 @@ class OperationPage(QWidget):
         
         # Robô
         self._robot_controller.state_changed.connect(self._status_panel.set_robot_state)
+        self._robot_controller.state_changed.connect(self._on_robot_state_changed)
         self._robot_controller.cycle_completed.connect(self._on_cycle_completed)
         self._robot_controller.error_occurred.connect(self._on_robot_error)
+        self._robot_controller.cycle_step.connect(self._on_cycle_step)
+        self._robot_controller.cycle_summary.connect(self._on_cycle_summary)
         
         # Timer para atualizar FPS
         self._fps_timer = QTimer(self)
@@ -385,6 +496,10 @@ class OperationPage(QWidget):
         
         self._event_console.add_info("Inferência iniciada - detecção ativa")
         
+        # Aplica modo de ciclo antes de iniciar o controlador
+        cycle_mode = "continuous" if self._continuous_cb.isChecked() else "manual"
+        self._robot_controller.set_cycle_mode(cycle_mode)
+        
         # Conecta ao CLP e inicia controlador de robô
         asyncio.create_task(self._connect_plc_and_start_robot())
         
@@ -397,38 +512,49 @@ class OperationPage(QWidget):
         self._status_panel.set_system_status("RUNNING")
     
     async def _connect_plc_and_start_robot(self) -> None:
-        """Conecta ao CLP, seta VisionReady e inicia controlador de robô."""
+        """
+        Conecta ao CLP em modo real por default.
+        Se falhar, avisa e inicia em modo simulado com robo virtual.
+        """
         try:
-            # Tenta conectar ao CLP
-            connected = await self._cip_client.connect()
+            # Tenta conectar (real primeiro, fallback para simulado)
+            await self._cip_client.connect()
             
-            if connected:
-                self._event_console.add_success("Conectado ao CLP")
-            else:
-                self._event_console.add_warning("CLP em modo simulado")
-            
-            # Seta VisionReady = True antes de iniciar o controlador
-            if self._cip_client._state.is_connected:
-                try:
-                    await self._cip_client.set_vision_ready(True)
-                    self._event_console.add_info("VisionReady = True enviado ao CLP")
-                except Exception as e:
-                    self._logger.warning("failed_to_set_vision_ready", error=str(e))
-            
-            # Inicia controlador de robô apenas se conectado (ou simulado)
-            if self._cip_client._state.is_connected:
-                self._robot_controller.start()
-                self._event_console.add_info("Controlador de robô iniciado")
-            else:
+            if self._cip_client.is_simulated:
                 self._event_console.add_warning(
-                    "Robô não iniciado: CLP não conectado. Sistema funcionará em modo simulado."
+                    "CLP real nao alcancavel - operando em modo SIMULADO.\n"
+                    "Robo virtual ativo: pick-and-place simulado com delays."
                 )
+                self._logger.warning("plc_fallback_to_simulated")
+            else:
+                self._event_console.add_success(
+                    f"Conectado ao CLP real ({self._settings.cip.ip}:{self._settings.cip.port})"
+                )
+            
+            # Seta VisionReady = True
+            try:
+                await self._cip_client.set_vision_ready(True)
+                self._event_console.add_info("VisionReady = True enviado ao CLP")
+            except Exception as e:
+                self._logger.warning("failed_to_set_vision_ready", error=str(e))
+            
+            # Inicia controlador de robo (funciona em real e simulado)
+            self._robot_controller.start()
+            mode_label = "continuo" if self._continuous_cb.isChecked() else "manual"
+            self._event_console.add_info(
+                f"Controlador de robo iniciado (modo {mode_label})"
+            )
                 
         except Exception as e:
-            self._event_console.add_warning(f"CLP em modo simulado: {e}")
-            # Mesmo em modo simulado, tenta iniciar o robô
-            if self._cip_client._state.is_connected:
-                self._robot_controller.start()
+            self._event_console.add_warning(
+                f"Erro ao conectar CLP: {e}\n"
+                f"Sistema operando em modo simulado."
+            )
+            self._logger.error("plc_connect_exception", error=str(e))
+            # Garante conexão simulada
+            if not self._cip_client.is_connected:
+                await self._cip_client._connect_simulated()
+            self._robot_controller.start()
     
     async def _connect_plc(self) -> None:
         """Conecta ao CLP."""
@@ -579,7 +705,12 @@ class OperationPage(QWidget):
         asyncio.create_task(self._shutdown_plc_connection())
         
         self._is_running = False
+        self._frame_count = 0
+        self._last_best_detection = None
         self._update_ui_state()
+        
+        # Reseta texto do botão pause caso estivesse pausado
+        self._pause_btn.setText("⏸ Pausar")
         
         self._video_widget.clear()
         
@@ -588,13 +719,26 @@ class OperationPage(QWidget):
     
     @Slot()
     def _toggle_pause(self) -> None:
-        """Alterna pause."""
+        """Alterna pause/resume do stream e da inferência."""
         if not self._is_running:
             return
         
-        # Toggle stream
-        # TODO: Implementar pause
-        self._event_console.add_info("Pause não implementado")
+        if self._stream_manager._worker and self._stream_manager._worker._paused:
+            # Resumir
+            self._stream_manager.resume()
+            self._inference_engine.start()
+            self._pause_btn.setText("⏸ Pausar")
+            self._event_console.add_info("Sistema retomado")
+            self._status_panel.set_system_status("RUNNING")
+            self._logger.info("system_resumed")
+        else:
+            # Pausar
+            self._stream_manager.pause()
+            self._inference_engine.stop()
+            self._pause_btn.setText("▶ Retomar")
+            self._event_console.add_info("Sistema pausado")
+            self._status_panel.set_system_status("PAUSED")
+            self._logger.info("system_paused")
     
     def _update_ui_state(self) -> None:
         """Atualiza estado da UI."""
@@ -602,9 +746,19 @@ class OperationPage(QWidget):
         self._pause_btn.setEnabled(self._is_running)
         self._stop_btn.setEnabled(self._is_running)
         self._source_combo.setEnabled(not self._is_running)
-        # Permite seleção de vídeo mesmo durante execução para trocar vídeo sem parar
-        # self._source_path_btn.setEnabled(not self._is_running)
         self._source_path_btn.setEnabled(True)  # Sempre habilitado
+        
+        # Controles de ciclo
+        is_manual = not self._continuous_cb.isChecked()
+        self._new_cycle_btn.setEnabled(
+            self._is_running and is_manual
+            and self._robot_controller.state.value == "READY_FOR_NEXT"
+        )
+        
+        if not self._is_running:
+            self._status_step_label.setText("—")
+            self._authorize_send_btn.setVisible(False)
+            self._authorize_send_btn.setEnabled(False)
         
         self._status_panel.set_stream_running(self._is_running)
         self._status_panel.set_inference_running(self._is_running)
@@ -613,6 +767,7 @@ class OperationPage(QWidget):
         """Handler para mudança de fonte."""
         # Mostra botão de seleção apenas para vídeo
         self._source_path_btn.setVisible(index == 0)
+        self._update_source_caption()
     
     def _select_video_file(self) -> None:
         """Abre diálogo para selecionar vídeo."""
@@ -723,8 +878,16 @@ class OperationPage(QWidget):
     
     def _toggle_fullscreen(self) -> None:
         """Alterna fullscreen do vídeo."""
-        # TODO: Implementar fullscreen
-        pass
+        main_window = self.window()
+        if main_window is None:
+            return
+        
+        if main_window.isFullScreen():
+            main_window.showNormal()
+            self._event_console.add_info("Saiu do modo tela cheia")
+        else:
+            main_window.showFullScreen()
+            self._event_console.add_info("Modo tela cheia (F11 para sair)")
     
     def _update_fps(self) -> None:
         """Atualiza FPS no widget de vídeo e latência CIP no painel (RF-06)."""
@@ -774,12 +937,14 @@ class OperationPage(QWidget):
         if event.detected:
             # Armazena a melhor detecção para comunicação periódica
             self._last_best_detection = event
+            self._detection_count += 1
             
             self._event_console.add_success(
                 f"Detectado: {event.class_name} ({event.confidence:.0%})",
                 "Detecção"
             )
             self._status_panel.update_detection(event)
+            self._status_panel.set_detection_count(self._detection_count)
             
             # Processa no controlador de robô
             self._robot_controller.process_detection(event)
@@ -790,14 +955,134 @@ class OperationPage(QWidget):
         self._event_console.add_success(f"Ciclo {cycle_number} completado", "Robô")
         self._status_panel.set_cycle_count(cycle_number)
     
+    def _on_cycle_mode_changed(self, state: int) -> None:
+        """Handler para mudança de modo de ciclo (manual/contínuo)."""
+        mode = "continuous" if self._continuous_cb.isChecked() else "manual"
+        self._robot_controller.set_cycle_mode(mode)
+        self._new_cycle_btn.setEnabled(not self._continuous_cb.isChecked() and self._is_running)
+        label = "Contínuo" if mode == "continuous" else "Manual"
+        self._event_console.add_info(f"Modo de ciclo: {label}")
+    
+    def _authorize_new_cycle(self) -> None:
+        """Autoriza o próximo ciclo de pick-and-place (modo manual)."""
+        self._robot_controller.authorize_next_cycle()
+        self._new_cycle_btn.setEnabled(False)
+        self._event_console.add_info("Novo ciclo autorizado pelo operador")
+    
+    def _authorize_send_to_plc(self) -> None:
+        """Autoriza envio das coordenadas ao CLP apos deteccao (modo manual)."""
+        self._robot_controller.authorize_send_to_plc()
+        self._authorize_send_btn.setEnabled(False)
+        self._event_console.add_info("Envio ao CLP autorizado pelo operador")
+    
+    def _status_message_for_state(self, state_value: str) -> str:
+        """Mensagem amigavel para a barra de status conforme estado do robo."""
+        from control.robot_controller import RobotControlState
+        messages = {
+            RobotControlState.INITIALIZING.value: "Inicializando conexao com CLP...",
+            RobotControlState.WAITING_AUTHORIZATION.value: "Aguardando autorizacao do CLP para deteccao...",
+            RobotControlState.DETECTING.value: "Aguardando deteccao de embalagem...",
+            RobotControlState.WAITING_SEND_AUTHORIZATION.value: "Objeto detectado. Aguardando autorizacao para envio ao CLP.",
+            RobotControlState.SENDING_DATA.value: "Enviando coordenadas ao CLP...",
+            RobotControlState.WAITING_ACK.value: "Aguardando ACK do robo...",
+            RobotControlState.ACK_CONFIRMED.value: "ACK recebido. Aguardando PICK...",
+            RobotControlState.WAITING_PICK.value: "Aguardando PICK (coleta)...",
+            RobotControlState.WAITING_PLACE.value: "Aguardando PLACE (posicionamento)...",
+            RobotControlState.WAITING_CYCLE_START.value: "Aguardando sinal de ciclo completo...",
+            RobotControlState.READY_FOR_NEXT.value: "Ciclo finalizado. Aguardando 'Novo Ciclo' (modo manual).",
+            RobotControlState.ERROR.value: "Erro no ciclo.",
+            RobotControlState.TIMEOUT.value: "Timeout. Aguardando novo ciclo.",
+            RobotControlState.SAFETY_BLOCKED.value: "Seguranca ativa. Aguardando liberacao.",
+            RobotControlState.STOPPED.value: "Parado.",
+        }
+        return messages.get(state_value, state_value)
+    
+    @Slot(str)
+    def _on_robot_state_changed(self, state_value: str) -> None:
+        """Handler para mudanca de estado do robo: botoes e barra de status."""
+        from control.robot_controller import RobotControlState
+        
+        # Barra de status
+        self._status_step_label.setText(self._status_message_for_state(state_value))
+        
+        # Botao Novo Ciclo
+        if (
+            state_value == RobotControlState.READY_FOR_NEXT.value
+            and self._robot_controller.cycle_mode == "manual"
+            and self._is_running
+        ):
+            self._new_cycle_btn.setEnabled(True)
+        else:
+            self._new_cycle_btn.setEnabled(False)
+        
+        # Botao Autorizar envio ao CLP (modo manual, apos deteccao)
+        if (
+            state_value == RobotControlState.WAITING_SEND_AUTHORIZATION.value
+            and self._robot_controller.cycle_mode == "manual"
+            and self._is_running
+        ):
+            self._authorize_send_btn.setVisible(True)
+            self._authorize_send_btn.setEnabled(True)
+        else:
+            self._authorize_send_btn.setVisible(False)
+            self._authorize_send_btn.setEnabled(False)
+    
+    @Slot(str)
+    def _on_cycle_step(self, step: str) -> None:
+        """Handler para etapa do ciclo — exibe no console e na barra de status."""
+        self._event_console.add_info(f"[Ciclo] {step}", "Robo")
+        self._status_step_label.setText(step)
+    
+    @Slot(list)
+    def _on_cycle_summary(self, steps: list) -> None:
+        """Handler para resumo do ciclo completo — exibe sumário formatado."""
+        if not steps:
+            return
+        
+        cycle_num = self._robot_controller.cycle_count
+        
+        # Calcula duração total
+        if len(steps) >= 2:
+            t0 = steps[0]["timestamp"]
+            t1 = steps[-1]["timestamp"]
+            duration = (t1 - t0).total_seconds()
+        else:
+            duration = 0.0
+        
+        self._event_console.add_success(
+            f"===== CICLO #{cycle_num} COMPLETO ({duration:.1f}s) =====",
+            "Ciclo"
+        )
+        for i, s in enumerate(steps, 1):
+            ts = s["timestamp"].strftime("%H:%M:%S")
+            self._event_console.add_info(
+                f"  {i}. [{ts}] {s['step']}",
+                "Ciclo"
+            )
+        self._event_console.add_success(
+            f"{'=' * 45}",
+            "Ciclo"
+        )
+        
+        # Em modo manual, informa que aguarda autorização
+        if self._robot_controller.cycle_mode == "manual":
+            self._event_console.add_warning(
+                "Aguardando operador clicar 'Novo Ciclo' para continuar.",
+                "Ciclo"
+            )
+    
     @Slot(str)
     def _on_cip_error(self, error: str) -> None:
         """Handler para erro CIP (RF-06: último erro na UI)."""
+        self._error_count += 1
         self._event_console.add_error(f"Erro CIP: {error}", "CLP")
         self._status_panel.set_last_error(error)
+        self._status_panel.set_error_count(self._error_count)
     
     @Slot(str)
     def _on_robot_error(self, error: str) -> None:
         """Handler para erro do robô (RF-06: último erro na UI)."""
+        self._error_count += 1
         self._event_console.add_error(f"Erro do robô: {error}", "Robô")
         self._status_panel.set_last_error(error)
+        self._status_panel.set_error_count(self._error_count)

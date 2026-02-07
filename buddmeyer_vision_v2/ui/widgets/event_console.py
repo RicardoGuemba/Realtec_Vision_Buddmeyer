@@ -106,13 +106,15 @@ class EventConsole(QWidget):
         # Console
         self._console = QTextEdit()
         self._console.setReadOnly(True)
-        self._console.setFont(QFont("Consolas", 9))
+        self._console.setFont(QFont("Consolas", 10))
+        self._console.setMinimumHeight(100)
         self._console.setStyleSheet("""
             QTextEdit {
                 background-color: #1a1a2e;
                 color: #e0e0e0;
                 border: 1px solid #2d3748;
                 border-radius: 4px;
+                padding: 6px;
             }
         """)
         layout.addWidget(self._console)

@@ -479,6 +479,20 @@ class ConfigurationPage(QWidget):
         self._brightness_slider.setValue(int(s.preprocess.brightness * 100))
         self._contrast_slider.setValue(int(s.preprocess.contrast * 100))
         
+        # ROI
+        if s.preprocess.roi and len(s.preprocess.roi) == 4:
+            self._roi_enabled.setChecked(True)
+            self._roi_x.setValue(s.preprocess.roi[0])
+            self._roi_y.setValue(s.preprocess.roi[1])
+            self._roi_w.setValue(s.preprocess.roi[2])
+            self._roi_h.setValue(s.preprocess.roi[3])
+        else:
+            self._roi_enabled.setChecked(False)
+            self._roi_x.setValue(0)
+            self._roi_y.setValue(0)
+            self._roi_w.setValue(640)
+            self._roi_h.setValue(480)
+        
         # CLP
         self._plc_ip.setText(s.cip.ip)
         self._plc_port.setValue(s.cip.port)
@@ -523,6 +537,17 @@ class ConfigurationPage(QWidget):
         s.preprocess.brightness = self._brightness_slider.value() / 100
         s.preprocess.contrast = self._contrast_slider.value() / 100
         
+        # ROI
+        if self._roi_enabled.isChecked():
+            s.preprocess.roi = [
+                self._roi_x.value(),
+                self._roi_y.value(),
+                self._roi_w.value(),
+                self._roi_h.value(),
+            ]
+        else:
+            s.preprocess.roi = None
+        
         # CLP
         s.cip.ip = self._plc_ip.text()
         s.cip.port = self._plc_port.value()
@@ -551,9 +576,40 @@ class ConfigurationPage(QWidget):
         QMessageBox.information(self, "Sucesso", "Configurações salvas com sucesso!")
     
     def _reset_settings(self) -> None:
-        """Restaura configurações padrão."""
-        # TODO: Implementar reset
-        QMessageBox.information(self, "Info", "Reset não implementado")
+        """Restaura configurações padrão carregando valores default do Pydantic."""
+        reply = QMessageBox.question(
+            self,
+            "Confirmar Reset",
+            "Restaurar todas as configurações para os valores padrão?\n"
+            "As configurações atuais serão perdidas.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        
+        from config.settings import (
+            StreamingSettings, DetectionSettings, PreprocessSettings,
+            CIPSettings, OutputSettings,
+        )
+        
+        # Aplica defaults no objeto settings em memória
+        s = self._settings
+        s.streaming = StreamingSettings()
+        s.detection = DetectionSettings()
+        s.preprocess = PreprocessSettings()
+        s.cip = CIPSettings()
+        s.output = OutputSettings()
+        
+        # Recarrega a UI com os novos valores
+        self._load_settings()
+        
+        logger.info("settings_reset_to_defaults")
+        QMessageBox.information(
+            self, "Sucesso",
+            "Configurações restauradas aos valores padrão.\n"
+            "Clique em 'Salvar Configurações' para persistir no arquivo."
+        )
     
     def _browse_video(self) -> None:
         """Abre diálogo para selecionar vídeo."""
@@ -595,6 +651,67 @@ class ConfigurationPage(QWidget):
         self._contrast_label.setText(str(value))
     
     def _test_plc_connection(self) -> None:
-        """Testa conexão com CLP."""
-        # TODO: Implementar teste de conexão
-        QMessageBox.information(self, "Info", "Teste não implementado")
+        """Testa conexão com CLP usando os parâmetros atuais da UI."""
+        ip = self._plc_ip.text().strip()
+        port = self._plc_port.value()
+        timeout = self._conn_timeout.value()
+        simulated = self._simulated.isChecked()
+        
+        if simulated:
+            QMessageBox.information(
+                self, "Modo Simulado",
+                "O modo simulado está ativado.\n"
+                "Desmarque 'Modo simulado' para testar a conexão real com o CLP."
+            )
+            return
+        
+        if not ip:
+            QMessageBox.warning(self, "Aviso", "Informe o IP do CLP.")
+            return
+        
+        # Teste de alcance via socket (não depende do CIP completo)
+        import socket
+        
+        QMessageBox.information(
+            self, "Testando...",
+            f"Testando conexão TCP com {ip}:{port}...\n"
+            f"Timeout: {timeout}s"
+        )
+        
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((ip, port))
+            sock.close()
+            
+            if result == 0:
+                QMessageBox.information(
+                    self, "Sucesso",
+                    f"Conexão TCP com {ip}:{port} estabelecida com sucesso.\n"
+                    f"O CLP está acessível na rede."
+                )
+                logger.info("plc_connection_test_success", ip=ip, port=port)
+            else:
+                QMessageBox.warning(
+                    self, "Falha",
+                    f"Não foi possível conectar a {ip}:{port}.\n"
+                    f"Código de erro: {result}\n\n"
+                    f"Verifique:\n"
+                    f"- O CLP está ligado e na rede?\n"
+                    f"- O IP e porta estão corretos?\n"
+                    f"- Há firewall bloqueando a porta?"
+                )
+                logger.warning("plc_connection_test_failed", ip=ip, port=port, error_code=result)
+        except socket.timeout:
+            QMessageBox.warning(
+                self, "Timeout",
+                f"Timeout ao conectar a {ip}:{port} ({timeout}s).\n"
+                f"O CLP não respondeu no tempo esperado."
+            )
+            logger.warning("plc_connection_test_timeout", ip=ip, port=port)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Erro",
+                f"Erro ao testar conexão: {e}"
+            )
+            logger.error("plc_connection_test_error", ip=ip, port=port, error=str(e))

@@ -98,7 +98,7 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 
 | Feature | Arquivo | Descrição |
 |---------|---------|-----------|
-| Cliente | `communication/cip_client.py` | `CIPClient` (singleton): conexão Omron NX via aphyt (`omron.n_series.NSeries`), leitura/escrita de TAGs com whitelist, reconexão automática, heartbeat. Sinais: `connected`, `disconnected`, `connection_error`, `state_changed`. `SimulatedPLC` para modo simulado com auto-ACK. |
+| Cliente | `communication/cip_client.py` | `CIPClient` (singleton): conexão Omron NX via aphyt (`omron.n_series.NSeries`), leitura/escrita de TAGs com whitelist, reconexão automática, heartbeat. Sinais: `connected`, `disconnected`, `connection_error`, `state_changed`. `SimulatedPLC` com ciclo completo de pick-and-place (ACK, Pick, Place, CycleComplete) com delays simulados. Por default tenta CLP real; se falhar, cai para simulado. |
 | Tags | `communication/tag_map.py` | `TagMap`: mapeamento nome lógico → nome físico no CLP (configurável em `config.yaml`). |
 | Estado | `communication/connection_state.py` | `ConnectionState`, `ConnectionStatus`. |
 | Contrato | `docs/TAG_CONTRACT.md` | Lista de TAGs escrita/leitura e semântica. |
@@ -107,7 +107,7 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 
 | Feature | Arquivo | Descrição |
 |---------|---------|-----------|
-| Controlador | `control/robot_controller.py` | `RobotController` (singleton): máquina de estados `RobotControlState` (INITIALIZING, WAITING_AUTHORIZATION, DETECTING, SENDING_DATA, WAITING_ACK, ACK_CONFIRMED, WAITING_PICK, WAITING_PLACE, WAITING_CYCLE_START, READY_FOR_NEXT, ERROR, TIMEOUT, SAFETY_BLOCKED, STOPPED); `VALID_TRANSITIONS` define transições; processa `DetectionEvent` e chama CIP para escrita/leitura de TAGs. Sinais: `state_changed`, `cycle_completed`, `error_occurred`, `detection_sent`. |
+| Controlador | `control/robot_controller.py` | `RobotController` (singleton): máquina de estados com handshake completo (Detecção -> Envio -> ACK -> Pick -> Place -> Ciclo). Suporta modo **manual** (aguarda autorização do operador via botão "Novo Ciclo") e **contínuo** (auto). Registra etapas do ciclo com timestamps e emite `cycle_summary` ao final. Sinais: `state_changed`, `cycle_completed`, `error_occurred`, `detection_sent`, `cycle_step`, `cycle_summary`. |
 | Ciclos | `control/cycle_processor.py` | `CycleProcessor`: `CycleRecord`, histórico de ciclos, estatísticas; sinais `cycle_started`, `cycle_completed`, `stats_updated`. |
 
 ### 2.8 Logging e métricas
@@ -136,11 +136,13 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 **Arquivo:** `ui/pages/operation_page.py` — `OperationPage`:
 
 - **Layout:** splitter horizontal: à esquerda vídeo + grupo “Eventos”; à direita `StatusPanel`.
-- **Vídeo:** `VideoWidget` — exibe frames e overlay de detecções; duplo clique para fullscreen.
+- **Vídeo:** `VideoWidget` — exibe frames e overlay de detecções; duplo clique ou F11 para tela cheia.
 - **Eventos:** `EventConsole` — log de eventos em tempo real.
-- **Status:** `StatusPanel` — estado do sistema, CLP, última detecção, contadores.
-- **Controles:** combo “Fonte” (Arquivo/USB/RTSP/GigE), botão “Selecionar...”, Iniciar, Parar; atalhos F5/F6.
-- **Lógica:** inicia/para stream, inferência, CIP e RobotController; comunica com CLP em intervalos (ex.: a cada 25 frames); atualiza UI via sinais.
+- **Status:** `StatusPanel` — estado do sistema, CLP, última detecção, contadores de detecções/ciclos/erros em tempo real, latência CIP.
+- **Controles:** combo “Fonte” (Arquivo/USB/RTSP/GigE), botão “Selecionar...”, Iniciar, Pausar/Retomar, Parar; "Modo Continuo" (checkbox), "Novo Ciclo" (botao); atalhos F5/F6/F11.
+- **Ciclo pick-and-place:** handshake completo Visao -> CLP -> Robo (ACK, Pick, Place, CycleComplete). Modo manual (aguarda operador) ou continuo (auto). Console exibe resumo com etapas e timestamps.
+- **CLP default real:** ao iniciar, tenta CLP real; se falhar, notifica e opera em simulado com robo virtual.
+- **Logica:** inicia/para stream, inferencia, CIP e RobotController; comunica com CLP via handshake; atualiza UI via sinais.
 
 ### 3.3 Aba Configuração
 
@@ -162,7 +164,7 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 - **Visão Geral:** `StatusCard` para Stream, Detecção, CLP, Pré-processamento; health banner.
 - **Métricas:** `MetricsChart` — FPS stream/inferência, latência, etc.
 - **Logs:** `LogViewer` — filtros por nível e componente, exportar/limpar.
-- **Sistema:** OS, Python, PyTorch, CUDA, uso de recursos, versão do modelo.
+- **Sistema:** OS, Python, PyTorch, CUDA, versão do modelo; monitoramento de CPU (% processo), memória RAM (MB) e GPU VRAM em tempo real (requer `psutil`).
 
 ### 3.5 Widgets reutilizáveis
 

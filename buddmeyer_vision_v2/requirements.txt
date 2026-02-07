@@ -32,6 +32,9 @@ colorama>=0.4.6
 # Integração Async/Qt
 qasync>=0.27.0
 
+# Monitoramento de Recursos
+psutil>=5.9.0
+
 # Gráficos (opcional)
 matplotlib>=3.8.0
 

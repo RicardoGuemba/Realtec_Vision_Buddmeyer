@@ -64,6 +64,8 @@ python buddmeyer_vision_v2/main.py
 ## 📖 Documentação
 
 - **[docs/DOCUMENTACAO_COMPLETA.md](docs/DOCUMENTACAO_COMPLETA.md)** – documentação principal do sistema: visão geral, features, UI, arquitetura e manual de manutenção. Use este arquivo como referência atualizada.
+- **[docs/USO_E_ABAS.md](docs/USO_E_ABAS.md)** – uso do sistema e ajustes possíveis em cada aba (Operação, Configuração, Diagnósticos); indicador CLP real vs simulado.
+- **[docs/PICK_PLACE_EXPEDICAO.md](docs/PICK_PLACE_EXPEDICAO.md)** – fluxo pick-and-place para expedição **sem robô conectado**: status na tela, tempos realistas, modo manual por padrão e autorização para envio ao CLP após detecção.
 - **[ROTEIRO_CLIENTE.md](ROTEIRO_CLIENTE.md)** – passo a passo para o cliente (configuração do CLP, logs e troubleshooting).
 - **[docs/TAG_CONTRACT.md](docs/TAG_CONTRACT.md)** – contrato de TAGs PC ↔ CLP.
 
