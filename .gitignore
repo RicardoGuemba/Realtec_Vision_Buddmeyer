@@ -12,6 +12,7 @@ buddmeyer_vision_v2/logs/*.log
 # === Build e distribuição (installer) ===
 buddmeyer_vision_v2/installer/build/
 buddmeyer_vision_v2/installer/dist/
+buddmeyer_vision_v2/installer*.zip
 build/
 dist/
 *.egg-info/

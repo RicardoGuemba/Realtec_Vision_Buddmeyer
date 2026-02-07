@@ -56,6 +56,7 @@ class OperationPage(QWidget):
         self._last_best_detection = None  # Armazena última melhor detecção
         
         self._setup_ui()
+        self._sync_combo_to_settings()
         self._connect_signals()
         self._setup_shortcuts()
     
@@ -209,6 +210,15 @@ class OperationPage(QWidget):
         
         layout.addWidget(controls_frame)
     
+    def _sync_combo_to_settings(self) -> None:
+        """Sincroniza o combo de fonte com o source_type do settings."""
+        source_type_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3}
+        current_source = self._settings.streaming.source_type
+        combo_index = source_type_map.get(current_source, 0)
+        self._source_combo.setCurrentIndex(combo_index)
+        # Atualiza visibilidade do botão de seleção de arquivo
+        self._source_path_btn.setVisible(combo_index == 0)
+    
     def _connect_signals(self) -> None:
         """Conecta os sinais."""
         # Stream
@@ -256,13 +266,21 @@ class OperationPage(QWidget):
         if self._is_running:
             return
         
-        self._event_console.add_info("Iniciando sistema...")
+        # Determina fonte selecionada na UI
+        source_types = ["video", "usb", "rtsp", "gige"]
+        source_labels = ["Arquivo de Vídeo", "Câmera USB", "Stream RTSP", "Câmera GigE"]
+        source_index = self._source_combo.currentIndex()
+        source_type = source_types[source_index]
         
-        # Atualiza fonte de vídeo
-        source_type = ["video", "usb", "rtsp", "gige"][self._source_combo.currentIndex()]
+        self._event_console.add_info(
+            f"Iniciando sistema com fonte: {source_labels[source_index]}..."
+        )
+        self._logger.info("start_system_requested", source_type=source_type)
+        
+        # Atualiza fonte em memória
         self._settings.streaming.source_type = source_type
         
-        # Se for vídeo, verifica se o arquivo existe e pode ser aberto
+        # Validação prévia específica para vídeo (arquivo)
         if source_type == "video":
             video_path_str = self._settings.streaming.video_path
             video_path = Path(video_path_str)
@@ -315,8 +333,8 @@ class OperationPage(QWidget):
             self._settings.streaming.video_path = str(video_path)
             self._logger.info("video_validated", path=str(video_path))
         
-        # Atualiza configuração do stream manager antes de iniciar
-        # Isso garante que use o caminho atualizado
+        # Atualiza configuração do StreamManager com os parâmetros da fonte
+        # change_source() atualiza o singleton em memória; start() usará esses valores
         if source_type == "video":
             self._stream_manager.change_source(
                 source_type=source_type,
@@ -340,10 +358,16 @@ class OperationPage(QWidget):
                 gige_port=self._settings.streaming.gige_port,
             )
         
-        # Inicia stream
+        # Inicia stream (usa configurações em memória, NÃO recarrega do YAML)
         if not self._stream_manager.start():
-            self._event_console.add_error("Falha ao iniciar stream")
+            self._event_console.add_error(
+                f"Falha ao iniciar stream ({source_labels[source_index]})"
+            )
             return
+        
+        self._event_console.add_info(
+            f"Stream iniciado: {source_labels[source_index]}"
+        )
         
         # Carrega modelo (se não carregado)
         if not self._inference_engine.is_model_loaded:
@@ -359,13 +383,17 @@ class OperationPage(QWidget):
             self._stream_manager.stop()
             return
         
-        # Conecta ao CLP primeiro, depois inicia controlador de robô
+        self._event_console.add_info("Inferência iniciada - detecção ativa")
+        
+        # Conecta ao CLP e inicia controlador de robô
         asyncio.create_task(self._connect_plc_and_start_robot())
         
         self._is_running = True
         self._update_ui_state()
         
-        self._event_console.add_success("Sistema iniciado")
+        self._event_console.add_success(
+            f"Sistema iniciado [{source_labels[source_index]}]"
+        )
         self._status_panel.set_system_status("RUNNING")
     
     async def _connect_plc_and_start_robot(self) -> None:
@@ -655,8 +683,8 @@ class OperationPage(QWidget):
             # Se o sistema está rodando, atualiza o stream sem parar a inferência
             if self._is_running and self._stream_manager.is_running:
                 self._event_console.add_info("Atualizando stream para novo vídeo...")
-                # Muda a fonte mantendo o stream ativo
-                # O change_source já reinicia automaticamente se estava rodando
+                
+                # Muda a fonte; change_source reinicia automaticamente se estava rodando
                 success = self._stream_manager.change_source(
                     source_type="video",
                     video_path=abs_path_str,
@@ -664,17 +692,34 @@ class OperationPage(QWidget):
                 )
                 
                 if success:
+                    # Atualiza o combo para refletir a nova fonte
+                    self._source_combo.blockSignals(True)
+                    self._source_combo.setCurrentIndex(0)  # "Arquivo de Vídeo"
+                    self._source_combo.blockSignals(False)
+                    self._source_path_btn.setVisible(True)
+                    
                     self._event_console.add_success(f"Stream atualizado para: {file_path_obj.name}")
                     self._logger.info("video_changed_during_runtime", path=abs_path_str)
                 else:
-                    self._event_console.add_error("Falha ao atualizar stream")
+                    # O stream falhou ao trocar — para o sistema inteiro para estado consistente
+                    self._event_console.add_error(
+                        f"Falha ao abrir vídeo: {file_path_obj.name}\n"
+                        f"O sistema será parado. Reinicie manualmente."
+                    )
+                    self._logger.error("video_change_failed_stopping_system", path=abs_path_str)
+                    self._stop_system()
             else:
-                # Sistema não está rodando, apenas atualiza configuração
+                # Sistema não está rodando, apenas atualiza configuração em memória
                 self._stream_manager.change_source(
                     source_type="video",
                     video_path=abs_path_str,
                     loop_video=self._settings.streaming.loop_video,
                 )
+                # Atualiza o combo para refletir a nova fonte
+                self._source_combo.blockSignals(True)
+                self._source_combo.setCurrentIndex(0)  # "Arquivo de Vídeo"
+                self._source_combo.blockSignals(False)
+                self._source_path_btn.setVisible(True)
     
     def _toggle_fullscreen(self) -> None:
         """Alterna fullscreen do vídeo."""
@@ -696,8 +741,14 @@ class OperationPage(QWidget):
     
     @Slot()
     def _on_stream_stopped(self) -> None:
-        """Handler para stream parado."""
+        """Handler para stream parado (inclusive por falha em change_source)."""
         self._event_console.add_info("Stream parado", "Stream")
+        
+        # Se a UI ainda pensa que está rodando mas o stream parou,
+        # precisamos sincronizar o estado para evitar inconsistência.
+        if self._is_running and not self._stream_manager.is_running:
+            self._logger.warning("stream_stopped_unexpectedly_resetting_state")
+            self._stop_system()
     
     @Slot(str)
     def _on_stream_error(self, error: str) -> None:

@@ -171,7 +171,12 @@ class StreamManager(QObject):
     
     def start(self) -> bool:
         """
-        Inicia o streaming.
+        Inicia o streaming usando as configurações atuais em memória.
+        
+        IMPORTANTE: NÃO recarrega do arquivo config.yaml.
+        As configurações devem ser atualizadas ANTES via change_source()
+        ou diretamente no objeto settings. Isso garante que a fonte
+        selecionada na UI (USB, video, RTSP, GigE) seja respeitada.
         
         Returns:
             True se iniciado com sucesso
@@ -180,82 +185,7 @@ class StreamManager(QObject):
             logger.warning("stream_already_running")
             return True
         
-        try:
-            # Recarrega configurações para garantir que está atualizado
-            # Força reload para pegar mudanças feitas na UI
-            self._settings = get_settings(reload=True)
-            
-            # Cria adaptador
-            settings = self._settings.streaming
-            
-            # Valida e normaliza caminho do vídeo se for arquivo
-            if settings.source_type == "video":
-                video_path_str = settings.video_path
-                video_path_obj = Path(video_path_str)
-                
-                # Tenta resolver caminho relativo
-                if not video_path_obj.is_absolute():
-                    base_path = Path(__file__).parent.parent
-                    video_path_obj = base_path / video_path_str
-                
-                # Normaliza caminho (resolve .., ./, etc)
-                try:
-                    video_path_obj = video_path_obj.resolve()
-                except Exception:
-                    pass
-                
-                if not video_path_obj.exists():
-                    error_msg = f"Arquivo de vídeo não encontrado: {video_path_obj}"
-                    logger.error("video_file_not_found", path=str(video_path_obj))
-                    self.stream_error.emit(error_msg)
-                    return False
-                
-                # Atualiza configuração com caminho normalizado
-                settings.video_path = str(video_path_obj)
-                logger.info("using_video_path", path=str(video_path_obj))
-            
-            self._adapter = create_adapter(
-                source_type=settings.source_type,
-                video_path=settings.video_path,
-                camera_index=settings.usb_camera_index,
-                rtsp_url=settings.rtsp_url,
-                gige_ip=settings.gige_ip,
-                gige_port=settings.gige_port,
-                loop_video=settings.loop_video,
-            )
-            
-            # Abre fonte
-            self._adapter.open()
-            
-            # Obtém FPS da fonte
-            props = self._adapter.get_properties()
-            target_fps = props.get("fps", 30.0)
-            if target_fps <= 0:
-                target_fps = 30.0
-            
-            # Cria worker
-            self._worker = StreamWorker(self._adapter, target_fps)
-            self._worker.frame_captured.connect(self._on_frame_captured)
-            self._worker.error_occurred.connect(self._on_error)
-            
-            # Inicia
-            self._worker.start()
-            self._is_running = True
-            self._health.reset()
-            
-            logger.info(
-                "stream_started",
-                source_type=settings.source_type,
-                target_fps=target_fps,
-            )
-            
-            self.stream_started.emit()
-            return True
-            
-        except Exception as e:
-            logger.error("stream_start_failed", error=str(e))
-            self.stream_error.emit(str(e))
-            return False
+        return self._start_with_current_settings()
     
     def stop(self) -> None:
         """Para o streaming."""
@@ -365,14 +295,25 @@ class StreamManager(QObject):
         
         # Reinicia se estava rodando
         if was_running:
-            return self._start_with_current_settings()
+            success = self._start_with_current_settings()
+            if not success:
+                # Informa a UI que o stream parou por falha no restart
+                logger.error(
+                    "change_source_restart_failed",
+                    source_type=source_type,
+                )
+                self.stream_stopped.emit()
+            return success
         
         return True
     
     def _start_with_current_settings(self) -> bool:
         """
         Inicia stream usando as configurações atuais em memória.
-        Usado internamente pelo change_source para não recarregar do arquivo.
+        
+        Usa o source_type e parâmetros que já estão no objeto settings
+        (definidos via change_source() ou diretamente pela UI).
+        NÃO recarrega do arquivo config.yaml.
         
         Returns:
             True se iniciado com sucesso
@@ -382,10 +323,19 @@ class StreamManager(QObject):
             return True
         
         try:
-            # Usa configurações atuais em memória (NÃO recarrega do arquivo)
             settings = self._settings.streaming
             
-            # Valida e normaliza caminho do vídeo se for arquivo
+            # Log detalhado do que será usado — essencial para diagnóstico
+            logger.info(
+                "stream_starting_with_settings",
+                source_type=settings.source_type,
+                video_path=settings.video_path if settings.source_type == "video" else None,
+                usb_camera_index=settings.usb_camera_index if settings.source_type == "usb" else None,
+                rtsp_url=settings.rtsp_url if settings.source_type == "rtsp" else None,
+                gige_ip=settings.gige_ip if settings.source_type == "gige" else None,
+            )
+            
+            # Validações específicas por tipo de fonte
             if settings.source_type == "video":
                 video_path_str = settings.video_path
                 video_path_obj = Path(video_path_str)
@@ -411,6 +361,33 @@ class StreamManager(QObject):
                 settings.video_path = str(video_path_obj)
                 logger.info("using_video_path", path=str(video_path_obj))
             
+            elif settings.source_type == "usb":
+                logger.info(
+                    "using_usb_camera",
+                    camera_index=settings.usb_camera_index,
+                )
+            
+            elif settings.source_type == "rtsp":
+                if not settings.rtsp_url:
+                    error_msg = "URL RTSP não configurada"
+                    logger.error("rtsp_url_empty")
+                    self.stream_error.emit(error_msg)
+                    return False
+                logger.info("using_rtsp_stream", url=settings.rtsp_url)
+            
+            elif settings.source_type == "gige":
+                if not settings.gige_ip:
+                    error_msg = "IP da câmera GigE não configurado"
+                    logger.error("gige_ip_empty")
+                    self.stream_error.emit(error_msg)
+                    return False
+                logger.info(
+                    "using_gige_camera",
+                    ip=settings.gige_ip,
+                    port=settings.gige_port,
+                )
+            
+            # Cria adaptador de acordo com o source_type
             self._adapter = create_adapter(
                 source_type=settings.source_type,
                 video_path=settings.video_path,
@@ -441,9 +418,8 @@ class StreamManager(QObject):
             self._health.reset()
             
             logger.info(
-                "stream_restarted_with_new_source",
+                "stream_started",
                 source_type=settings.source_type,
-                video_path=settings.video_path if settings.source_type == "video" else None,
                 target_fps=target_fps,
             )
             
@@ -451,7 +427,7 @@ class StreamManager(QObject):
             return True
             
         except Exception as e:
-            logger.error("stream_restart_failed", error=str(e))
+            logger.error("stream_start_failed", error=str(e), source_type=self._settings.streaming.source_type)
             self.stream_error.emit(str(e))
             return False
     

@@ -1,9 +1,9 @@
 log_level: INFO
 log_file: logs/buddmeyer_vision.log
 streaming:
-  source_type: video
+  source_type: usb
   video_path: C:/Vision_Buddmeyer_PySide/buddmeyer_vision_v2/videos/Colcha.mp4
-  usb_camera_index: 0
+  usb_camera_index: 1
   rtsp_url: ''
   gige_ip: ''
   gige_port: 3956

@@ -61,11 +61,11 @@ Ou:
 python buddmeyer_vision_v2/main.py
 ```
 
-## 📖 Roteiro para o cliente
+## 📖 Documentação
 
-Para uso no ambiente do cliente (configuração do CLP, logs e troubleshooting), consulte:
-
-- **[ROTEIRO_CLIENTE.md](ROTEIRO_CLIENTE.md)** – passo a passo para configurar o IP do CLP, localizar logs e proceder em caso de erro de conexão ou envio de tag.
+- **[docs/DOCUMENTACAO_COMPLETA.md](docs/DOCUMENTACAO_COMPLETA.md)** – documentação principal do sistema: visão geral, features, UI, arquitetura e manual de manutenção. Use este arquivo como referência atualizada.
+- **[ROTEIRO_CLIENTE.md](ROTEIRO_CLIENTE.md)** – passo a passo para o cliente (configuração do CLP, logs e troubleshooting).
+- **[docs/TAG_CONTRACT.md](docs/TAG_CONTRACT.md)** – contrato de TAGs PC ↔ CLP.
 
 ## 📁 Estrutura do Projeto
 
@@ -116,6 +116,9 @@ buddmeyer_vision_v2/
 │   │   └── log_viewer.py      # Visualizador de logs
 │   └── styles/
 │       └── industrial.qss     # Tema industrial
+├── docs/                      # Documentação
+│   ├── DOCUMENTACAO_COMPLETA.md  # Documentação principal (atual)
+│   └── TAG_CONTRACT.md          # Contrato de TAGs CLP
 ├── models/                    # Modelos de ML
 ├── logs/                      # Logs do sistema
 └── videos/                    # Vídeos de teste
