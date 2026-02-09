@@ -14,21 +14,22 @@ Documento que descreve tudo o que foi implementado e alterado para suporte à c�
 6. [Carregamento do modelo em segundo plano](#6-carregamento-do-modelo-em-segundo-plano)
 7. [FPS e gargalos](#7-fps-e-gargalos)
 8. [Referência rápida de arquivos](#8-referência-rápida-de-arquivos)
+9. [Guia rápido – Câmera STC-MCS2041POE](#9-guia-rápido--câmera-stc-mcs2041poe)
 
 ---
 
 ## 1. Visão geral do que foi feito
 
-| Item | Descrição |
-|------|-----------|
-| **Nova fonte GenTL** | Tipo de fonte "Câmera GenTL (Omron Sentech)" usando a biblioteca **Harvester** (GenICam/GenTL) e arquivo CTI do fabricante. |
-| **Configuração GenTL** | CTI path, índice da câmera, **dimensão máxima** (redimensionamento) e **FPS alvo** configuráveis na aba Configuração e na Operação ("Selecionar CTI..."). |
-| **Proteção na abertura** | Remoção do `fetch()` em `open()` do adaptador GenTL para não travar a UI ao obter um frame 20MP na thread principal. Dimensões passam a ser obtidas no primeiro `read()` na thread do worker. |
-| **Redimensionamento** | Frames grandes (ex.: 5472×3648) são redimensionados para um máximo configurável (ex.: 1920 px no lado maior) para não travar exibição e inferência. Limite de segurança mesmo com "Sem limite" (0). |
-| **Cache no widget de vídeo** | Conversão numpy → QImage → QPixmap e escala passam a ser cacheadas; só recalculadas quando o frame ou o tamanho do widget mudam, reduzindo trabalho na thread principal. |
-| **Carregamento do modelo em background** | Carregamento do modelo RT-DETR em uma **QThread**; botão "Carregando modelo..." e UI responsiva durante o carregamento. |
-| **Logger** | Uso de `datetime.now(timezone.utc)` em vez de `datetime.utcnow()` para evitar DeprecationWarning. |
-| **Dependência** | Inclusão de **harvesters** em `requirements.txt` para suporte GenTL. |
+| Item                                           | Descrição                                                                                                                                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Nova fonte GenTL**                     | Tipo de fonte "Câmera GenTL (Omron Sentech)" usando a biblioteca**Harvester** (GenICam/GenTL) e arquivo CTI do fabricante.                                                                            |
+| **Configuração GenTL**                 | CTI path, índice da câmera,**dimensão máxima** (redimensionamento) e **FPS alvo** configuráveis na aba Configuração e na Operação ("Selecionar CTI...").                                |
+| **Proteção na abertura**               | Remoção do `fetch()` em `open()` do adaptador GenTL para não travar a UI ao obter um frame 20MP na thread principal. Dimensões passam a ser obtidas no primeiro `read()` na thread do worker.      |
+| **Redimensionamento**                    | Frames grandes (ex.: 5472×3648) são redimensionados para um máximo configurável (ex.: 1920 px no lado maior) para não travar exibição e inferência. Limite de segurança mesmo com "Sem limite" (0). |
+| **Cache no widget de vídeo**            | Conversão numpy → QImage → QPixmap e escala passam a ser cacheadas; só recalculadas quando o frame ou o tamanho do widget mudam, reduzindo trabalho na thread principal.                                 |
+| **Carregamento do modelo em background** | Carregamento do modelo RT-DETR em uma**QThread**; botão "Carregando modelo..." e UI responsiva durante o carregamento.                                                                                |
+| **Logger**                               | Uso de `datetime.now(timezone.utc)` em vez de `datetime.utcnow()` para evitar DeprecationWarning.                                                                                                        |
+| **Dependência**                         | Inclusão de**harvesters** em `requirements.txt` para suporte GenTL.                                                                                                                                 |
 
 ---
 
@@ -40,13 +41,13 @@ Documento que descreve tudo o que foi implementado e alterado para suporte à c�
 
 Cada tipo de câmera tem um **adaptador** que implementa `open()` e `read()`:
 
-| Tipo | Classe | Como conecta |
-|------|--------|---------------|
-| **Arquivo de vídeo** | `VideoFileAdapter` | `cv2.VideoCapture(caminho_do_arquivo)` |
-| **USB** | `USBCameraAdapter` | `cv2.VideoCapture(índice, cv2.CAP_DSHOW)` (Windows) ou fallback sem CAP_DSHOW |
-| **RTSP** | `RTSPAdapter` | `cv2.VideoCapture(url, cv2.CAP_FFMPEG)` |
-| **GigE (genérico)** | `GigECameraAdapter` | Pipeline GStreamer (UDP/RTP/JPEG) ou `cv2.VideoCapture("gige://ip:porta")` |
-| **GenTL (Omron Sentech)** | `GenTLHarvesterAdapter` | Harvester: `add_file(cti)`, `update()`, `create(índice)`, `start()`; frames via `fetch()` |
+| Tipo                            | Classe                    | Como conecta                                                                                        |
+| ------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Arquivo de vídeo**     | `VideoFileAdapter`      | `cv2.VideoCapture(caminho_do_arquivo)`                                                            |
+| **USB**                   | `USBCameraAdapter`      | `cv2.VideoCapture(índice, cv2.CAP_DSHOW)` (Windows) ou fallback sem CAP_DSHOW                    |
+| **RTSP**                  | `RTSPAdapter`           | `cv2.VideoCapture(url, cv2.CAP_FFMPEG)`                                                           |
+| **GigE (genérico)**      | `GigECameraAdapter`     | Pipeline GStreamer (UDP/RTP/JPEG) ou `cv2.VideoCapture("gige://ip:porta")`                        |
+| **GenTL (Omron Sentech)** | `GenTLHarvesterAdapter` | Harvester:`add_file(cti)`, `update()`, `create(índice)`, `start()`; frames via `fetch()` |
 
 A **factory** que escolhe o adaptador é a função **`create_adapter()`** no mesmo arquivo (parâmetros: `source_type`, `video_path`, `camera_index`, `rtsp_url`, `gige_ip`, `gige_port`, `gentl_cti_path`, `gentl_device_index`, `gentl_max_dimension`, `gentl_target_fps`, `loop_video`).
 
@@ -76,28 +77,29 @@ A **factory** que escolhe o adaptador é a função **`create_adapter()`** no me
 
 ### 3.2 Fluxo no código
 
-1. **`GenTLHarvesterAdapter.open()`**  
-   - Carrega Harvester, `add_file(cti_path)`, `update()`, `create(device_index)`, `start()`.  
+1. **`GenTLHarvesterAdapter.open()`**
+
+   - Carrega Harvester, `add_file(cti_path)`, `update()`, `create(device_index)`, `start()`.
    - **Não** faz `fetch()` aqui (evita travar a UI com um frame 20MP na thread principal).
+2. **`GenTLHarvesterAdapter.read()`** (rodando na **StreamWorker**)
 
-2. **`GenTLHarvesterAdapter.read()`** (rodando na **StreamWorker**)  
-   - `fetch(timeout)` → buffer do Harvester.  
-   - `reshape` + `cvtColor` (mono → BGR se necessário).  
-   - **`_resize_if_needed()`**: se o frame exceder `max_dimension` (ou o limite de segurança 1920), redimensiona mantendo proporção.  
+   - `fetch(timeout)` → buffer do Harvester.
+   - `reshape` + `cvtColor` (mono → BGR se necessário).
+   - **`_resize_if_needed()`**: se o frame exceder `max_dimension` (ou o limite de segurança 1920), redimensiona mantendo proporção.
    - Retorna `FrameInfo` com o frame já redimensionado.
+3. **Logs**
 
-3. **Logs**  
-   - `gentl_opened`: apenas `cti_path` e `device_index`.  
+   - `gentl_opened`: apenas `cti_path` e `device_index`.
    - `gentl_first_frame`: uma vez, com `native=(largura, altura)` e `output=(largura, altura)` após o resize.
 
 ### 3.3 Parâmetros configuráveis
 
-| Parâmetro | Config / UI | Efeito |
-|-----------|-------------|--------|
-| **gentl_cti_path** | Caminho do arquivo .cti | Driver GenTL usado pelo Harvester. |
-| **gentl_device_index** | Índice 0, 1, … | Qual câmera na lista do Harvester. |
-| **gentl_max_dimension** | 0–4096 px (0 = “Sem limite”) | Lado maior do frame após resize; 0 ainda aplica limite de segurança 1920. |
-| **gentl_target_fps** | 1–60 (ex.: 10 ou 15) | FPS alvo do StreamWorker; o FPS real pode ser menor se o processamento por frame for lento. |
+| Parâmetro                    | Config / UI                     | Efeito                                                                                      |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------- |
+| **gentl_cti_path**      | Caminho do arquivo .cti         | Driver GenTL usado pelo Harvester.                                                          |
+| **gentl_device_index**  | Índice 0, 1, …                | Qual câmera na lista do Harvester.                                                         |
+| **gentl_max_dimension** | 0–4096 px (0 = “Sem limite”) | Lado maior do frame após resize; 0 ainda aplica limite de segurança 1920.                 |
+| **gentl_target_fps**    | 1–60 (ex.: 10 ou 15)           | FPS alvo do StreamWorker; o FPS real pode ser menor se o processamento por frame for lento. |
 
 ---
 
@@ -201,16 +203,172 @@ A **factory** que escolhe o adaptador é a função **`create_adapter()`** no me
 
 ## 8. Referência rápida de arquivos
 
-| Arquivo | Alterações / conteúdo |
-|---------|------------------------|
-| **streaming/source_adapters.py** | `SourceType.GENTL`, `GenTLHarvesterAdapter` (open sem fetch, read com resize e log `gentl_first_frame`), `create_adapter` com parâmetros GenTL, limite de segurança 1920. |
-| **streaming/stream_manager.py** | `change_source` e `_start_with_current_settings` com `gentl_*`, validação de CTI para GenTL, `create_adapter(..., gentl_max_dimension, gentl_target_fps)`. |
-| **config/settings.py** | `StreamingSettings`: `gentl_cti_path`, `gentl_device_index`, `gentl_max_dimension`, `gentl_target_fps`; `source_type` válido inclui `"gentl"`. |
-| **ui/pages/configuration_page.py** | Combo com "Câmera GenTL (Omron Sentech)", grupo GenTL (CTI, índice, dimensão máx., FPS alvo), load/save e `_browse_gentl_cti`. |
-| **ui/pages/operation_page.py** | Combo e legenda GenTL, botão "Selecionar CTI...", validação de CTI ao iniciar, `_ModelLoaderWorker`, carregamento do modelo em QThread, `_on_model_load_finished`, `_finish_start_system_after_model`. |
-| **ui/widgets/video_widget.py** | Cache de QPixmap/tamanho/shape; `_ensure_cached_pixmap()`, `resizeEvent` invalidando cache. |
-| **core/logger.py** | Timestamp com `datetime.now(timezone.utc)` em vez de `utcnow()`. |
-| **requirements.txt** | Entrada `harvesters>=2.3.0`. |
+| Arquivo                                  | Alterações / conteúdo                                                                                                                                                                                       |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **streaming/source_adapters.py**   | `SourceType.GENTL`, `GenTLHarvesterAdapter` (open sem fetch, read com resize e log `gentl_first_frame`), `create_adapter` com parâmetros GenTL, limite de segurança 1920.                            |
+| **streaming/stream_manager.py**    | `change_source` e `_start_with_current_settings` com `gentl_*`, validação de CTI para GenTL, `create_adapter(..., gentl_max_dimension, gentl_target_fps)`.                                           |
+| **config/settings.py**             | `StreamingSettings`: `gentl_cti_path`, `gentl_device_index`, `gentl_max_dimension`, `gentl_target_fps`; `source_type` válido inclui `"gentl"`.                                                  |
+| **ui/pages/configuration_page.py** | Combo com "Câmera GenTL (Omron Sentech)", grupo GenTL (CTI, índice, dimensão máx., FPS alvo), load/save e `_browse_gentl_cti`.                                                                           |
+| **ui/pages/operation_page.py**     | Combo e legenda GenTL, botão "Selecionar CTI...", validação de CTI ao iniciar,`_ModelLoaderWorker`, carregamento do modelo em QThread, `_on_model_load_finished`, `_finish_start_system_after_model`. |
+| **ui/widgets/video_widget.py**     | Cache de QPixmap/tamanho/shape;`_ensure_cached_pixmap()`, `resizeEvent` invalidando cache.                                                                                                                 |
+| **core/logger.py**                 | Timestamp com `datetime.now(timezone.utc)` em vez de `utcnow()`.                                                                                                                                           |
+| **requirements.txt**               | Entrada `harvesters>=2.3.0`.                                                                                                                                                                                 |
+
+---
+
+## 9. Guia rápido – Câmera STC-MCS2041POE
+
+Guia de configuração e uso da câmera **STC-MCS2041POE** (Omron Sentech) com Python e Harvester.
+
+### 9.1 Arquitetura recomendada (produção)
+
+```
+Câmera STC-MCS2041POE
+        ↓
+Driver + GenTL (CTI)
+        ↓
+Harvesters (Python)
+        ↓
+OpenCV / IA / Automação
+```
+
+### 9.2 Pré-requisitos de hardware
+
+- PC com **porta Ethernet Gigabit**
+- Cabo **Ethernet Cat5e ou Cat6**
+- Alimentação **PoE**:
+  - Switch PoE **ou**
+  - Injetor PoE
+- Windows 10 ou 11 (64 bits)
+
+### 9.3 Instalação de drivers e SDK
+
+#### 9.3.1 Download
+
+A Omron Sentech disponibiliza o SDK (drivers + GenTL + Viewer) no site oficial:
+
+👉 https://sentech.co.jp/en/products/stc-mcs2041poe
+
+O pacote inclui:
+
+- Driver GigE Vision
+- GenTL Producer (`.cti`)
+- ST Viewer (software de visualização)
+- Bibliotecas GenICam
+
+> **Observação:** o download pode exigir cadastro.
+
+#### 9.3.2 Instalação
+
+1. Execute o instalador **como administrador**
+2. Aceite os componentes padrão
+3. Reinicie o computador após a instalação
+
+### 9.4 Conexão física e rede
+
+1. Conecte a câmera ao PC ou switch via **Ethernet**
+2. Garanta que o **PoE esteja ativo**
+3. Aguarde a câmera inicializar (LED ativo)
+
+Configuração típica de IP (caso necessário):
+
+- A câmera geralmente usa IP **link-local (169.254.x.x)**
+- O PC deve estar na **mesma sub-rede**
+
+### 9.5 Teste inicial com ST Viewer (recomendado)
+
+Antes do Python, valide no software:
+
+1. Abra o **ST Viewer**
+2. A câmera **STC-MCS2041POE** deve aparecer na lista
+3. Abra a câmera (acesso exclusivo)
+4. Ative o **Live View**
+5. Ajuste parâmetros básicos:
+   - `TriggerMode = Off`
+   - `AcquisitionMode = Continuous`
+   - `PixelFormat = Mono8` (recomendado)
+
+Se o vídeo aparecer, a instalação está correta.
+
+### 9.6 Preparação do ambiente Python
+
+#### 9.6.1 Criar ambiente virtual (opcional, recomendado)
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+#### 9.6.2 Instalar dependências
+
+```bash
+pip install harvesters opencv-python numpy
+```
+
+### 9.7 Localização do arquivo CTI (GenTL)
+
+Após instalar o SDK, o arquivo `.cti` normalmente fica em:
+
+```text
+C:\Program Files\Common Files\OMRON_SENTECH\GenTL\v1_5\StGenTL_MD_VC141_v1_5_x64.cti
+```
+
+Esse arquivo é obrigatório para que o Harvester consiga descobrir e abrir a câmera.
+
+### 9.8 Código Python de exemplo (teste final)
+
+O código abaixo:
+
+- Descobre a câmera
+- Abre a STC-MCS2041POE
+- Exibe o vídeo ao vivo
+- Encerra ao pressionar `q`
+
+> **Importante:** feche o ST Viewer antes de rodar o script.
+
+```python
+from harvesters.core import Harvester
+import cv2
+import numpy as np
+
+CTI_PATH = r"C:\Program Files\Common Files\OMRON_SENTECH\GenTL\v1_5\StGenTL_MD_VC141_v1_5_x64.cti"
+
+def main():
+    h = Harvester()
+    h.add_file(CTI_PATH)
+    h.update()
+
+    if not h.device_info_list:
+        raise RuntimeError("Nenhuma câmera encontrada")
+
+    print("Câmeras encontradas:")
+    for i, dev in enumerate(h.device_info_list):
+        print(f"[{i}] {dev.display_name}")
+
+    ia = h.create(0)
+    ia.start()
+    print("Aquisição iniciada. Pressione 'q' para sair.")
+
+    try:
+        while True:
+            with ia.fetch(timeout=3000) as buffer:
+                component = buffer.payload.components[0]
+                image = component.data.reshape(
+                    component.height,
+                    component.width
+                )
+                cv2.imshow("STC-MCS2041POE - Teste", image)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+    finally:
+        ia.stop()
+        ia.destroy()
+        cv2.destroyAllWindows()
+        h.reset()
+
+if __name__ == "__main__":
+    main()
+```
 
 ---
 
