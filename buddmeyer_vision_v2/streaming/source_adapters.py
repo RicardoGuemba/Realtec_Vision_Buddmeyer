@@ -26,6 +26,7 @@ class SourceType(str, Enum):
     USB = "usb"       # Câmera USB/USB-C
     RTSP = "rtsp"     # Stream RTSP
     GIGE = "gige"     # Câmera GigE (Gigabit Ethernet)
+    GENTL = "gentl"   # Câmera GenTL (Harvester, ex.: Omron Sentech)
 
 
 class BaseSourceAdapter(ABC):
@@ -405,6 +406,164 @@ class GigECameraAdapter(BaseSourceAdapter):
         return self._create_frame_info(frame)
 
 
+class GenTLHarvesterAdapter(BaseSourceAdapter):
+    """
+    Adaptador para câmeras GenTL via Harvester (ex.: Omron Sentech GigE).
+    
+    Usa a biblioteca harvesters (GenICam/GenTL). Requer arquivo CTI do fabricante.
+    Opcionalmente redimensiona frames (max_dimension no lado maior) e usa target_fps
+    configuráveis para não travar a UI e a inferência.
+    """
+
+    def __init__(
+        self,
+        cti_path: str,
+        device_index: int = 0,
+        fetch_timeout_ms: int = 3000,
+        max_dimension: int = 1920,
+        target_fps: float = 15.0,
+    ):
+        super().__init__(SourceType.GENTL)
+        self.cti_path = Path(cti_path).resolve() if cti_path else None
+        self.device_index = device_index
+        self.fetch_timeout_ms = fetch_timeout_ms
+        self._max_dimension = max_dimension if max_dimension > 0 else 0
+        self._fps = float(target_fps)
+        self._harvester = None
+        self._ia = None
+        self._width = 0
+        self._height = 0
+
+    def open(self) -> bool:
+        """Abre a câmera via Harvester (GenTL)."""
+        try:
+            from harvesters.core import Harvester
+        except ImportError as e:
+            logger.error("harvesters_not_installed", error=str(e))
+            raise StreamSourceError(
+                "Biblioteca 'harvesters' não instalada. Instale com: pip install harvesters",
+                {"error": str(e)},
+            ) from e
+
+        if not self.cti_path or not self.cti_path.exists():
+            logger.error("gentl_cti_not_found", path=str(self.cti_path))
+            raise StreamSourceError(
+                f"Arquivo CTI GenTL não encontrado: {self.cti_path}",
+                {"cti_path": str(self.cti_path)},
+            )
+
+        h = Harvester()
+        h.add_file(str(self.cti_path))
+        h.update()
+
+        if not h.device_info_list:
+            h.reset()
+            logger.error("gentl_no_devices_found")
+            raise StreamSourceError(
+                "Nenhuma câmera GenTL encontrada. Verifique o CTI e a conexão.",
+                {"cti_path": str(self.cti_path)},
+            )
+
+        if self.device_index >= len(h.device_info_list):
+            h.reset()
+            raise StreamSourceError(
+                f"Índice de câmera inválido: {self.device_index} (encontradas: {len(h.device_info_list)})",
+                {"device_index": self.device_index, "count": len(h.device_info_list)},
+            )
+
+        self._harvester = h
+        self._ia = h.create(self.device_index)
+        self._ia.start()
+        # Não fazemos fetch() aqui: obter um frame 20MP na thread principal trava a UI.
+        # Dimensões são preenchidas no primeiro read() (na thread do worker).
+
+        self._is_open = True
+        self._start_time = time.time()
+        self._first_frame_logged = False
+        logger.info(
+            "gentl_opened",
+            cti_path=str(self.cti_path),
+            device_index=self.device_index,
+        )
+        return True
+
+    # Limite de segurança: mesmo com max_dimension=0, não enviar frames > 1920 no lado maior
+    _SAFETY_MAX_DIMENSION = 1920
+
+    def _resize_if_needed(self, image: np.ndarray) -> np.ndarray:
+        """Redimensiona o frame se exceder max_dimension (0 = não redimensionar; há limite de segurança)."""
+        h, w = image.shape[:2]
+        effective_max = self._max_dimension if self._max_dimension > 0 else self._SAFETY_MAX_DIMENSION
+        if w <= effective_max and h <= effective_max:
+            return image
+        scale = min(effective_max / w, effective_max / h, 1.0)
+        new_w = int(round(w * scale))
+        new_h = int(round(h * scale))
+        out = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        self._width = new_w
+        self._height = new_h
+        if self._max_dimension <= 0 and (w > self._SAFETY_MAX_DIMENSION or h > self._SAFETY_MAX_DIMENSION):
+            logger.debug("gentl_safety_cap_applied", original=(w, h), resized=(new_w, new_h))
+        return out
+
+    def read(self) -> Optional[FrameInfo]:
+        """Lê um frame da câmera GenTL (redimensionado se necessário). Tudo roda na thread do worker."""
+        if not self._is_open or self._ia is None:
+            return None
+        try:
+            with self._ia.fetch(timeout=self.fetch_timeout_ms) as buffer:
+                component = buffer.payload.components[0]
+                native_w, native_h = component.width, component.height
+                if not self._first_frame_logged:
+                    self._width = native_w
+                    self._height = native_h
+                image = component.data.reshape(native_h, native_w)
+                if len(image.shape) == 2:
+                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+                image = self._resize_if_needed(image)
+                if not self._first_frame_logged:
+                    logger.info(
+                        "gentl_first_frame",
+                        native=(native_w, native_h),
+                        output=(self._width, self._height),
+                    )
+                    self._first_frame_logged = True
+                return self._create_frame_info(image)
+        except Exception as e:
+            logger.warning("gentl_read_failed", error=str(e))
+            return None
+
+    def get_properties(self) -> Dict[str, Any]:
+        """Retorna propriedades da fonte (sem cv2.VideoCapture)."""
+        if not self._is_open:
+            return {}
+        return {
+            "width": self._width,
+            "height": self._height,
+            "fps": self._fps,
+            "frame_count": 0,
+            "fourcc": 0,
+        }
+
+    def close(self) -> None:
+        """Fecha a câmera e libera Harvester."""
+        if self._ia is not None:
+            try:
+                self._ia.stop()
+                self._ia.destroy()
+            except Exception as e:
+                logger.warning("gentl_stop_error", error=str(e))
+            self._ia = None
+        if self._harvester is not None:
+            try:
+                self._harvester.reset()
+            except Exception as e:
+                logger.warning("gentl_reset_error", error=str(e))
+            self._harvester = None
+        self._is_open = False
+        logger.info("source_closed", source_type=self.source_type.value)
+
+
 def create_adapter(
     source_type: str,
     video_path: str = "",
@@ -412,6 +571,10 @@ def create_adapter(
     rtsp_url: str = "",
     gige_ip: str = "",
     gige_port: int = 3956,
+    gentl_cti_path: str = "",
+    gentl_device_index: int = 0,
+    gentl_max_dimension: int = 1920,
+    gentl_target_fps: float = 15.0,
     loop_video: bool = True,
     **kwargs
 ) -> BaseSourceAdapter:
@@ -419,12 +582,16 @@ def create_adapter(
     Factory para criar adaptadores de fonte.
     
     Args:
-        source_type: Tipo de fonte (video, usb, rtsp, gige)
+        source_type: Tipo de fonte (video, usb, rtsp, gige, gentl)
         video_path: Caminho para arquivo de vídeo
         camera_index: Índice da câmera USB
         rtsp_url: URL do stream RTSP
         gige_ip: IP da câmera GigE
         gige_port: Porta da câmera GigE
+        gentl_cti_path: Caminho do arquivo CTI GenTL (Harvester, ex. Omron Sentech)
+        gentl_device_index: Índice da câmera na lista GenTL
+        gentl_max_dimension: Dimensão máx. do lado maior (px); 0 = sem redimensionar
+        gentl_target_fps: FPS alvo do stream GenTL
         loop_video: Se True, faz loop do vídeo
     
     Returns:
@@ -440,5 +607,12 @@ def create_adapter(
         return RTSPAdapter(rtsp_url)
     elif source == SourceType.GIGE:
         return GigECameraAdapter(gige_ip, gige_port)
+    elif source == SourceType.GENTL:
+        return GenTLHarvesterAdapter(
+            gentl_cti_path,
+            device_index=gentl_device_index,
+            max_dimension=gentl_max_dimension,
+            target_fps=gentl_target_fps,
+        )
     else:
         raise ValueError(f"Tipo de fonte não suportado: {source_type}")

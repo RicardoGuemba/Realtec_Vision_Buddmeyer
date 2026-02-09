@@ -232,6 +232,8 @@ class StreamManager(QObject):
         rtsp_url: str = "",
         gige_ip: str = "",
         gige_port: int = 3956,
+        gentl_cti_path: str = "",
+        gentl_device_index: int = 0,
         loop_video: bool = True,
         **kwargs
     ) -> bool:
@@ -245,6 +247,8 @@ class StreamManager(QObject):
             rtsp_url: URL RTSP
             gige_ip: IP GigE
             gige_port: Porta GigE
+            gentl_cti_path: Caminho do CTI GenTL (Harvester)
+            gentl_device_index: Índice da câmera GenTL
             loop_video: Loop do vídeo
         
         Returns:
@@ -284,6 +288,10 @@ class StreamManager(QObject):
             settings.gige_ip = gige_ip
         if gige_port > 0:
             settings.gige_port = gige_port
+        if gentl_cti_path:
+            settings.gentl_cti_path = gentl_cti_path
+        if gentl_device_index >= 0:
+            settings.gentl_device_index = gentl_device_index
         if loop_video is not None:
             settings.loop_video = loop_video
         
@@ -333,6 +341,7 @@ class StreamManager(QObject):
                 usb_camera_index=settings.usb_camera_index if settings.source_type == "usb" else None,
                 rtsp_url=settings.rtsp_url if settings.source_type == "rtsp" else None,
                 gige_ip=settings.gige_ip if settings.source_type == "gige" else None,
+                gentl_cti_path=settings.gentl_cti_path if settings.source_type == "gentl" else None,
             )
             
             # Validações específicas por tipo de fonte
@@ -387,6 +396,19 @@ class StreamManager(QObject):
                     port=settings.gige_port,
                 )
             
+            elif settings.source_type == "gentl":
+                cti_path = Path(settings.gentl_cti_path)
+                if not settings.gentl_cti_path or not cti_path.exists():
+                    error_msg = "Caminho do arquivo CTI GenTL não configurado ou não encontrado"
+                    logger.error("gentl_cti_empty_or_not_found", path=settings.gentl_cti_path)
+                    self.stream_error.emit(error_msg)
+                    return False
+                logger.info(
+                    "using_gentl_camera",
+                    cti_path=settings.gentl_cti_path,
+                    device_index=settings.gentl_device_index,
+                )
+            
             # Cria adaptador de acordo com o source_type
             self._adapter = create_adapter(
                 source_type=settings.source_type,
@@ -395,6 +417,10 @@ class StreamManager(QObject):
                 rtsp_url=settings.rtsp_url,
                 gige_ip=settings.gige_ip,
                 gige_port=settings.gige_port,
+                gentl_cti_path=settings.gentl_cti_path,
+                gentl_device_index=settings.gentl_device_index,
+                gentl_max_dimension=settings.gentl_max_dimension,
+                gentl_target_fps=settings.gentl_target_fps,
                 loop_video=settings.loop_video,
             )
             

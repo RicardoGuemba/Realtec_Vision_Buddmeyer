@@ -1,12 +1,16 @@
 log_level: INFO
 log_file: logs/buddmeyer_vision.log
 streaming:
-  source_type: usb
+  source_type: gentl
   video_path: C:/Vision_Buddmeyer_PySide/buddmeyer_vision_v2/videos/Colcha.mp4
   usb_camera_index: 1
   rtsp_url: ''
   gige_ip: ''
   gige_port: 3956
+  gentl_cti_path: C:/Program Files/Common Files/OMRON_SENTECH/GenTL/v1_5/StGenTL_MD_VC141_v1_5_x64.cti
+  gentl_device_index: 0
+  gentl_max_dimension: 1920
+  gentl_target_fps: 10.0
   max_frame_buffer_size: 30
   loop_video: true
 detection:
@@ -17,7 +21,7 @@ detection:
   inference_fps: 15
   device: auto
 preprocess:
-  profile: default
+  profile: bright
   brightness: 0.0
   contrast: 0.0
 cip:

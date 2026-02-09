@@ -5,13 +5,14 @@ Página de Operação - Aba principal para operação do sistema.
 
 import asyncio
 from pathlib import Path
+from typing import Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QPushButton, QComboBox, QLabel, QFileDialog,
     QSplitter, QGroupBox, QCheckBox
 )
-from PySide6.QtCore import Qt, Slot, QTimer
+from PySide6.QtCore import Qt, Slot, QTimer, QObject, Signal, QThread
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 
 from config import get_settings
@@ -25,6 +26,22 @@ from control import RobotController
 from ui.widgets.video_widget import VideoWidget
 from ui.widgets.status_panel import StatusPanel
 from ui.widgets.event_console import EventConsole
+
+
+class _ModelLoaderWorker(QObject):
+    """Worker que carrega o modelo de inferência em uma thread (evita travar a UI)."""
+    finished = Signal(bool)  # True = sucesso
+
+    def __init__(self, inference_engine: InferenceEngine):
+        super().__init__()
+        self._engine = inference_engine
+
+    def run(self) -> None:
+        try:
+            success = self._engine.load_model()
+            self.finished.emit(success)
+        except Exception:
+            self.finished.emit(False)
 
 
 class OperationPage(QWidget):
@@ -56,6 +73,11 @@ class OperationPage(QWidget):
         self._last_best_detection = None  # Armazena última melhor detecção
         self._detection_count = 0  # Contador total de detecções
         self._error_count = 0  # Contador total de erros
+        
+        # Carregamento assíncrono do modelo (evita travar a UI)
+        self._model_loader_thread: Optional[QThread] = None
+        self._model_loader_worker: Optional[_ModelLoaderWorker] = None
+        self._pending_start_source_label: Optional[str] = None
         
         self._setup_ui()
         self._sync_combo_to_settings()
@@ -164,6 +186,7 @@ class OperationPage(QWidget):
             "Câmera USB",
             "Stream RTSP",
             "Câmera GigE",
+            "Câmera GenTL (Omron Sentech)",
         ])
         self._source_combo.currentIndexChanged.connect(self._on_source_changed)
         controls_layout.addWidget(self._source_combo)
@@ -171,6 +194,12 @@ class OperationPage(QWidget):
         self._source_path_btn = QPushButton("Selecionar...")
         self._source_path_btn.clicked.connect(self._select_video_file)
         controls_layout.addWidget(self._source_path_btn)
+        
+        self._gentl_cti_btn = QPushButton("Selecionar CTI...")
+        self._gentl_cti_btn.setToolTip("Selecionar arquivo CTI GenTL (ex.: Omron Sentech)")
+        self._gentl_cti_btn.clicked.connect(self._select_gentl_cti_file)
+        self._gentl_cti_btn.setVisible(False)
+        controls_layout.addWidget(self._gentl_cti_btn)
         
         controls_layout.addStretch()
         
@@ -304,12 +333,13 @@ class OperationPage(QWidget):
     
     def _sync_combo_to_settings(self) -> None:
         """Sincroniza o combo de fonte com o source_type do settings."""
-        source_type_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3}
+        source_type_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3, "gentl": 4}
         current_source = self._settings.streaming.source_type
         combo_index = source_type_map.get(current_source, 1)  # 1 = usb como padrão
         self._source_combo.setCurrentIndex(combo_index)
-        # Atualiza visibilidade do botão de seleção de arquivo
+        # Atualiza visibilidade dos botões de seleção (vídeo vs GenTL)
         self._source_path_btn.setVisible(combo_index == 0)
+        self._gentl_cti_btn.setVisible(combo_index == 4)
         self._update_source_caption()
     
     def _update_source_caption(self) -> None:
@@ -324,8 +354,14 @@ class OperationPage(QWidget):
             self._source_caption.setText(f"Fonte: Câmera USB (índice {cam})")
         elif idx == 2:
             self._source_caption.setText("Fonte: Stream RTSP")
-        else:
+        elif idx == 3:
             self._source_caption.setText("Fonte: Câmera GigE")
+        else:
+            cti = (self._settings.streaming.gentl_cti_path or "").strip()
+            if cti:
+                self._source_caption.setText(f"Fonte: Câmera GenTL — {Path(cti).name}")
+            else:
+                self._source_caption.setText("Fonte: Câmera GenTL (Omron Sentech) — use 'Selecionar CTI...'")
     
     def _connect_signals(self) -> None:
         """Conecta os sinais."""
@@ -378,8 +414,8 @@ class OperationPage(QWidget):
             return
         
         # Determina fonte selecionada na UI
-        source_types = ["video", "usb", "rtsp", "gige"]
-        source_labels = ["Arquivo de Vídeo", "Câmera USB", "Stream RTSP", "Câmera GigE"]
+        source_types = ["video", "usb", "rtsp", "gige", "gentl"]
+        source_labels = ["Arquivo de Vídeo", "Câmera USB", "Stream RTSP", "Câmera GigE", "Câmera GenTL (Omron Sentech)"]
         source_index = self._source_combo.currentIndex()
         source_type = source_types[source_index]
         
@@ -390,6 +426,25 @@ class OperationPage(QWidget):
         
         # Atualiza fonte em memória
         self._settings.streaming.source_type = source_type
+        
+        # Validação prévia para GenTL (arquivo CTI)
+        if source_type == "gentl":
+            cti_path_str = (self._settings.streaming.gentl_cti_path or "").strip()
+            if not cti_path_str:
+                self._event_console.add_error(
+                    "Arquivo CTI GenTL não configurado. Use o botão 'Selecionar CTI...' para escolher "
+                    "o arquivo .cti (ex.: Omron Sentech) ou configure na aba Configuração."
+                )
+                self._logger.error("gentl_cti_empty_on_start")
+                return
+            cti_path = Path(cti_path_str)
+            if not cti_path.exists():
+                self._event_console.add_error(
+                    f"Arquivo CTI não encontrado:\n{cti_path}\n\n"
+                    "Use 'Selecionar CTI...' para escolher o arquivo correto."
+                )
+                self._logger.error("gentl_cti_not_found_on_start", path=str(cti_path))
+                return
         
         # Validação prévia específica para vídeo (arquivo)
         if source_type == "video":
@@ -468,6 +523,12 @@ class OperationPage(QWidget):
                 gige_ip=self._settings.streaming.gige_ip,
                 gige_port=self._settings.streaming.gige_port,
             )
+        elif source_type == "gentl":
+            self._stream_manager.change_source(
+                source_type=source_type,
+                gentl_cti_path=self._settings.streaming.gentl_cti_path,
+                gentl_device_index=self._settings.streaming.gentl_device_index,
+            )
         
         # Inicia stream (usa configurações em memória, NÃO recarrega do YAML)
         if not self._stream_manager.start():
@@ -480,36 +541,58 @@ class OperationPage(QWidget):
             f"Stream iniciado: {source_labels[source_index]}"
         )
         
-        # Carrega modelo (se não carregado)
-        if not self._inference_engine.is_model_loaded:
-            self._event_console.add_info("Carregando modelo de detecção...")
-            if not self._inference_engine.load_model():
-                self._event_console.add_error("Falha ao carregar modelo")
-                self._stream_manager.stop()
-                return
+        source_label = source_labels[source_index]
         
-        # Inicia inferência
+        # Carrega modelo em segundo plano (evita travar a UI)
+        if not self._inference_engine.is_model_loaded:
+            self._event_console.add_info("Carregando modelo de detecção... (aguarde)")
+            self._play_btn.setText("Carregando modelo...")
+            self._play_btn.setEnabled(False)
+            self._pending_start_source_label = source_label
+            self._model_loader_thread = QThread()
+            self._model_loader_worker = _ModelLoaderWorker(self._inference_engine)
+            self._model_loader_worker.moveToThread(self._model_loader_thread)
+            self._model_loader_thread.started.connect(self._model_loader_worker.run)
+            self._model_loader_worker.finished.connect(self._on_model_load_finished)
+            self._model_loader_thread.start()
+            return
+        
+        self._finish_start_system_after_model(source_label)
+    
+    def _finish_start_system_after_model(self, source_label: str) -> None:
+        """Conclui a inicialização após o modelo estar carregado (inicia inferência, CLP, atualiza UI)."""
         if not self._inference_engine.start():
             self._event_console.add_error("Falha ao iniciar inferência")
             self._stream_manager.stop()
             return
-        
         self._event_console.add_info("Inferência iniciada - detecção ativa")
-        
-        # Aplica modo de ciclo antes de iniciar o controlador
         cycle_mode = "continuous" if self._continuous_cb.isChecked() else "manual"
         self._robot_controller.set_cycle_mode(cycle_mode)
-        
-        # Conecta ao CLP e inicia controlador de robô
         asyncio.create_task(self._connect_plc_and_start_robot())
-        
         self._is_running = True
         self._update_ui_state()
-        
-        self._event_console.add_success(
-            f"Sistema iniciado [{source_labels[source_index]}]"
-        )
+        self._event_console.add_success(f"Sistema iniciado [{source_label}]")
         self._status_panel.set_system_status("RUNNING")
+    
+    @Slot(bool)
+    def _on_model_load_finished(self, success: bool) -> None:
+        """Chamado quando o carregamento do modelo em segundo plano termina."""
+        label = self._pending_start_source_label or "Fonte"
+        self._play_btn.setText("▶ Iniciar")
+        self._play_btn.setEnabled(True)
+        self._pending_start_source_label = None
+        if self._model_loader_thread is not None:
+            self._model_loader_thread.quit()
+            self._model_loader_thread.wait(5000)
+            self._model_loader_thread.deleteLater()
+            self._model_loader_thread = None
+        self._model_loader_worker = None
+        if not success:
+            self._event_console.add_error("Falha ao carregar modelo")
+            self._stream_manager.stop()
+            return
+        self._event_console.add_info("Modelo carregado.")
+        self._finish_start_system_after_model(label)
     
     async def _connect_plc_and_start_robot(self) -> None:
         """
@@ -765,8 +848,8 @@ class OperationPage(QWidget):
     
     def _on_source_changed(self, index: int) -> None:
         """Handler para mudança de fonte."""
-        # Mostra botão de seleção apenas para vídeo
         self._source_path_btn.setVisible(index == 0)
+        self._gentl_cti_btn.setVisible(index == 4)
         self._update_source_caption()
     
     def _select_video_file(self) -> None:
@@ -875,6 +958,36 @@ class OperationPage(QWidget):
                 self._source_combo.setCurrentIndex(0)  # "Arquivo de Vídeo"
                 self._source_combo.blockSignals(False)
                 self._source_path_btn.setVisible(True)
+    
+    def _select_gentl_cti_file(self) -> None:
+        """Abre diálogo para selecionar arquivo CTI GenTL (ex.: Omron Sentech)."""
+        initial_dir = None
+        current_path = (self._settings.streaming.gentl_cti_path or "").strip()
+        if current_path:
+            current_path_obj = Path(current_path)
+            if current_path_obj.exists():
+                initial_dir = str(current_path_obj.parent)
+            elif current_path_obj.parent.exists():
+                initial_dir = str(current_path_obj.parent)
+        if not initial_dir:
+            initial_dir = ""  # deixa o sistema escolher (ex.: Program Files)
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar arquivo CTI GenTL",
+            initial_dir,
+            "Arquivos CTI (*.cti);;Todos os Arquivos (*)",
+        )
+        if file_path:
+            path_obj = Path(file_path)
+            if not path_obj.exists() or not path_obj.is_file():
+                self._event_console.add_error(f"Arquivo não encontrado ou inválido: {file_path}")
+                return
+            abs_path_str = str(path_obj.resolve())
+            self._settings.streaming.gentl_cti_path = abs_path_str
+            self._update_source_caption()
+            self._event_console.add_info(f"CTI GenTL selecionado: {path_obj.name}")
+            self._logger.info("gentl_cti_selected", path=abs_path_str)
     
     def _toggle_fullscreen(self) -> None:
         """Alterna fullscreen do vídeo."""

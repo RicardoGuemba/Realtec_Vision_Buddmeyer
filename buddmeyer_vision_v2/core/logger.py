@@ -6,7 +6,7 @@ Sistema de logging estruturado usando structlog.
 import logging
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from contextvars import ContextVar
@@ -46,8 +46,8 @@ def add_correlation_id(logger: logging.Logger, method_name: str, event_dict: dic
 
 
 def add_timestamp(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
-    """Adiciona timestamp ISO 8601 ao evento de log."""
-    event_dict["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    """Adiciona timestamp ISO 8601 ao evento de log (UTC)."""
+    event_dict["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return event_dict
 
 

@@ -126,6 +126,7 @@ class ConfigurationPage(QWidget):
             "Câmera USB",
             "Stream RTSP",
             "Câmera GigE",
+            "Câmera GenTL (Omron Sentech)",
         ])
         self._source_type.currentIndexChanged.connect(self._on_source_type_changed)
         source_layout.addRow("Tipo:", self._source_type)
@@ -185,6 +186,42 @@ class ConfigurationPage(QWidget):
         gige_layout.addRow("Porta:", self._gige_port)
         
         layout.addWidget(self._gige_group)
+        
+        # GenTL (Harvester - Omron Sentech)
+        self._gentl_group = QGroupBox("Câmera GenTL (Omron Sentech)")
+        gentl_layout = QFormLayout(self._gentl_group)
+        
+        cti_layout = QHBoxLayout()
+        self._gentl_cti_path = QLineEdit()
+        self._gentl_cti_path.setPlaceholderText(r"C:\...\StGenTL_MD_VC141_v1_5_x64.cti")
+        self._gentl_cti_path.setReadOnly(True)
+        cti_layout.addWidget(self._gentl_cti_path)
+        
+        gentl_browse_btn = QPushButton("Procurar...")
+        gentl_browse_btn.clicked.connect(self._browse_gentl_cti)
+        cti_layout.addWidget(gentl_browse_btn)
+        gentl_layout.addRow("Arquivo CTI:", cti_layout)
+        
+        self._gentl_device_index = QSpinBox()
+        self._gentl_device_index.setRange(0, 10)
+        self._gentl_device_index.setToolTip("Índice da câmera na lista GenTL (0 = primeira)")
+        gentl_layout.addRow("Índice da câmera:", self._gentl_device_index)
+        
+        self._gentl_max_dimension = QSpinBox()
+        self._gentl_max_dimension.setRange(0, 4096)
+        self._gentl_max_dimension.setValue(1920)
+        self._gentl_max_dimension.setSpecialValueText("Sem limite")
+        self._gentl_max_dimension.setToolTip("Máximo do lado maior em pixels (0 = não redimensionar). Reduz carga em câmeras 20MP+.")
+        gentl_layout.addRow("Dimensão máx. (px):", self._gentl_max_dimension)
+        
+        self._gentl_target_fps = QDoubleSpinBox()
+        self._gentl_target_fps.setRange(1.0, 60.0)
+        self._gentl_target_fps.setValue(15.0)
+        self._gentl_target_fps.setDecimals(1)
+        self._gentl_target_fps.setToolTip("FPS alvo do stream (valores menores reduzem carga em alta resolução)")
+        gentl_layout.addRow("FPS alvo:", self._gentl_target_fps)
+        
+        layout.addWidget(self._gentl_group)
         
         # Buffer
         buffer_group = QGroupBox("Buffer")
@@ -456,7 +493,7 @@ class ConfigurationPage(QWidget):
         s = self._settings
         
         # Vídeo
-        source_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3}
+        source_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3, "gentl": 4}
         self._source_type.setCurrentIndex(source_map.get(s.streaming.source_type, 0))
         self._video_path.setText(s.streaming.video_path)
         self._loop_video.setChecked(s.streaming.loop_video)
@@ -464,6 +501,10 @@ class ConfigurationPage(QWidget):
         self._rtsp_url.setText(s.streaming.rtsp_url)
         self._gige_ip.setText(s.streaming.gige_ip)
         self._gige_port.setValue(s.streaming.gige_port)
+        self._gentl_cti_path.setText(s.streaming.gentl_cti_path)
+        self._gentl_device_index.setValue(s.streaming.gentl_device_index)
+        self._gentl_max_dimension.setValue(s.streaming.gentl_max_dimension)
+        self._gentl_target_fps.setValue(s.streaming.gentl_target_fps)
         self._buffer_size.setValue(s.streaming.max_frame_buffer_size)
         
         # Modelo
@@ -514,7 +555,7 @@ class ConfigurationPage(QWidget):
         s = self._settings
         
         # Vídeo
-        source_types = ["video", "usb", "rtsp", "gige"]
+        source_types = ["video", "usb", "rtsp", "gige", "gentl"]
         s.streaming.source_type = source_types[self._source_type.currentIndex()]
         s.streaming.video_path = self._video_path.text()
         s.streaming.loop_video = self._loop_video.isChecked()
@@ -522,6 +563,10 @@ class ConfigurationPage(QWidget):
         s.streaming.rtsp_url = self._rtsp_url.text()
         s.streaming.gige_ip = self._gige_ip.text()
         s.streaming.gige_port = self._gige_port.value()
+        s.streaming.gentl_cti_path = self._gentl_cti_path.text()
+        s.streaming.gentl_device_index = self._gentl_device_index.value()
+        s.streaming.gentl_max_dimension = self._gentl_max_dimension.value()
+        s.streaming.gentl_target_fps = self._gentl_target_fps.value()
         s.streaming.max_frame_buffer_size = self._buffer_size.value()
         
         # Modelo
@@ -611,6 +656,17 @@ class ConfigurationPage(QWidget):
             "Clique em 'Salvar Configurações' para persistir no arquivo."
         )
     
+    def _browse_gentl_cti(self) -> None:
+        """Abre diálogo para selecionar arquivo CTI GenTL."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar arquivo CTI GenTL",
+            "",
+            "Arquivos CTI (*.cti);;Todos (*)",
+        )
+        if file_path:
+            self._gentl_cti_path.setText(file_path)
+    
     def _browse_video(self) -> None:
         """Abre diálogo para selecionar vídeo."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -637,6 +693,7 @@ class ConfigurationPage(QWidget):
         self._usb_group.setVisible(index == 1)
         self._rtsp_group.setVisible(index == 2)
         self._gige_group.setVisible(index == 3)
+        self._gentl_group.setVisible(index == 4)
     
     def _on_confidence_changed(self, value: int) -> None:
         """Handler para mudança de confiança."""
