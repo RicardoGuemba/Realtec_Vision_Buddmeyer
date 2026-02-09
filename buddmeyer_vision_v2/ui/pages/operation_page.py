@@ -10,7 +10,7 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QPushButton, QComboBox, QLabel, QFileDialog,
-    QSplitter, QGroupBox, QCheckBox
+    QSplitter, QGroupBox, QCheckBox, QMessageBox,
 )
 from PySide6.QtCore import Qt, Slot, QTimer, QObject, Signal, QThread
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
@@ -26,6 +26,7 @@ from control import RobotController
 from ui.widgets.video_widget import VideoWidget
 from ui.widgets.status_panel import StatusPanel
 from ui.widgets.event_console import EventConsole
+from ui.widgets.gentl_camera_settings_dialog import GenTLCameraSettingsDialog
 
 
 class _ModelLoaderWorker(QObject):
@@ -54,6 +55,8 @@ class OperationPage(QWidget):
     - Console de eventos
     - Controles de operação
     """
+    
+    model_preload_finished = Signal(bool)  # True = modelo carregado em segundo plano
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -200,6 +203,12 @@ class OperationPage(QWidget):
         self._gentl_cti_btn.clicked.connect(self._select_gentl_cti_file)
         self._gentl_cti_btn.setVisible(False)
         controls_layout.addWidget(self._gentl_cti_btn)
+
+        self._gentl_settings_btn = QPushButton("Ajustes da câmera...")
+        self._gentl_settings_btn.setToolTip("Abrir tela de ajustes da câmera GenTL (gain, exposição). Requer stream ativo.")
+        self._gentl_settings_btn.clicked.connect(self._open_gentl_camera_settings)
+        self._gentl_settings_btn.setVisible(False)
+        controls_layout.addWidget(self._gentl_settings_btn)
         
         controls_layout.addStretch()
         
@@ -340,6 +349,7 @@ class OperationPage(QWidget):
         # Atualiza visibilidade dos botões de seleção (vídeo vs GenTL)
         self._source_path_btn.setVisible(combo_index == 0)
         self._gentl_cti_btn.setVisible(combo_index == 4)
+        self._gentl_settings_btn.setVisible(combo_index == 4)
         self._update_source_caption()
     
     def _update_source_caption(self) -> None:
@@ -545,7 +555,13 @@ class OperationPage(QWidget):
         
         # Carrega modelo em segundo plano (evita travar a UI)
         if not self._inference_engine.is_model_loaded:
-            self._event_console.add_info("Carregando modelo de detecção... (aguarde)")
+            # Se já está carregando (ex.: pré-carregamento), só junta o "Iniciar" ao fim
+            if self._model_loader_thread is not None:
+                self._pending_start_source_label = source_label
+                self._play_btn.setText("Carregando modelo...")
+                self._play_btn.setEnabled(False)
+                return
+            self._event_console.add_info("Carregando modelo de detecção... (pode levar 1–2 min na primeira vez)")
             self._play_btn.setText("Carregando modelo...")
             self._play_btn.setEnabled(False)
             self._pending_start_source_label = source_label
@@ -577,22 +593,40 @@ class OperationPage(QWidget):
     @Slot(bool)
     def _on_model_load_finished(self, success: bool) -> None:
         """Chamado quando o carregamento do modelo em segundo plano termina."""
-        label = self._pending_start_source_label or "Fonte"
+        label = self._pending_start_source_label
+        self._pending_start_source_label = None
         self._play_btn.setText("▶ Iniciar")
         self._play_btn.setEnabled(True)
-        self._pending_start_source_label = None
         if self._model_loader_thread is not None:
             self._model_loader_thread.quit()
             self._model_loader_thread.wait(5000)
             self._model_loader_thread.deleteLater()
             self._model_loader_thread = None
         self._model_loader_worker = None
-        if not success:
-            self._event_console.add_error("Falha ao carregar modelo")
-            self._stream_manager.stop()
+        if label is not None:
+            # Fluxo "Iniciar": usuário clicou em Iniciar e esperou o modelo
+            if not success:
+                self._event_console.add_error("Falha ao carregar modelo")
+                self._stream_manager.stop()
+                return
+            self._event_console.add_info("Modelo carregado.")
+            self._finish_start_system_after_model(label)
+        else:
+            # Pré-carregamento em segundo plano (sem clicar Iniciar)
+            self.model_preload_finished.emit(success)
+    
+    def start_model_preload(self) -> None:
+        """Inicia o carregamento do modelo em segundo plano (sem bloquear a UI). Ao abrir o app, o modelo já fica pronto para uso."""
+        if self._inference_engine.is_model_loaded:
             return
-        self._event_console.add_info("Modelo carregado.")
-        self._finish_start_system_after_model(label)
+        if self._model_loader_thread is not None:
+            return
+        self._model_loader_thread = QThread()
+        self._model_loader_worker = _ModelLoaderWorker(self._inference_engine)
+        self._model_loader_worker.moveToThread(self._model_loader_thread)
+        self._model_loader_thread.started.connect(self._model_loader_worker.run)
+        self._model_loader_worker.finished.connect(self._on_model_load_finished)
+        self._model_loader_thread.start()
     
     async def _connect_plc_and_start_robot(self) -> None:
         """
@@ -850,6 +884,7 @@ class OperationPage(QWidget):
         """Handler para mudança de fonte."""
         self._source_path_btn.setVisible(index == 0)
         self._gentl_cti_btn.setVisible(index == 4)
+        self._gentl_settings_btn.setVisible(index == 4)
         self._update_source_caption()
     
     def _select_video_file(self) -> None:
@@ -988,6 +1023,19 @@ class OperationPage(QWidget):
             self._update_source_caption()
             self._event_console.add_info(f"CTI GenTL selecionado: {path_obj.name}")
             self._logger.info("gentl_cti_selected", path=abs_path_str)
+
+    def _open_gentl_camera_settings(self) -> None:
+        """Abre a tela de ajustes da câmera GenTL (gain, exposição). Requer stream ativo."""
+        adapter = self._stream_manager.get_gentl_adapter()
+        if adapter is None:
+            QMessageBox.information(
+                self,
+                "Ajustes da câmera",
+                "Inicie o stream com a câmera GenTL (Omron Sentech) para poder ajustar gain, exposição e outros parâmetros.",
+            )
+            return
+        dlg = GenTLCameraSettingsDialog(adapter, self)
+        dlg.exec()
     
     def _toggle_fullscreen(self) -> None:
         """Alterna fullscreen do vídeo."""

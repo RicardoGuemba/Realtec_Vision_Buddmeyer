@@ -9,6 +9,7 @@ from .status_panel import StatusPanel
 from .metrics_chart import MetricsChart
 from .event_console import EventConsole
 from .log_viewer import LogViewer
+from .gentl_camera_settings_dialog import GenTLCameraSettingsDialog
 
 __all__ = [
     "VideoWidget",
@@ -17,4 +18,5 @@ __all__ = [
     "MetricsChart",
     "EventConsole",
     "LogViewer",
+    "GenTLCameraSettingsDialog",
 ]

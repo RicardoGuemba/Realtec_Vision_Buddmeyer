@@ -545,6 +545,82 @@ class GenTLHarvesterAdapter(BaseSourceAdapter):
             "fourcc": 0,
         }
 
+    def get_gentl_node_map(self):
+        """Retorna o node map GenICam da câmera (para ajustes de gain, exposure, etc.)."""
+        if not self._is_open or self._ia is None:
+            return None
+        try:
+            return self._ia.remote_device.node_map
+        except Exception as e:
+            logger.warning("gentl_node_map_error", error=str(e))
+            return None
+
+    def get_gentl_features(self) -> Dict[str, Any]:
+        """
+        Lê parâmetros GenICam comuns (Gain, Exposure, Auto) da câmera.
+        Retorna um dicionário com chaves: Gain, ExposureTime, ExposureAuto, GainAuto
+        (apenas as que existirem no device). Cada valor é um dict com keys:
+        value, min, max, writable; para Auto, value é string (e.g. "Off", "Continuous").
+        """
+        nm = self.get_gentl_node_map()
+        if nm is None:
+            return {}
+        out = {}
+        # Nomes comuns GenICam (Omron Sentech / GigE Vision)
+        for node_name in ("Gain", "ExposureTime", "ExposureTimeAbs"):
+            try:
+                node = getattr(nm, node_name, None)
+                if node is None:
+                    continue
+                val = getattr(node, "value", None)
+                if val is None:
+                    continue
+                min_val = getattr(node, "min", None)
+                max_val = getattr(node, "max", None)
+                out[node_name] = {
+                    "value": float(val),
+                    "min": float(min_val) if min_val is not None else 0,
+                    "max": float(max_val) if max_val is not None else val * 2,
+                    "writable": True,
+                }
+            except Exception:
+                pass
+        # Auto features (enumeração: Off, Once, Continuous)
+        for node_name in ("ExposureAuto", "GainAuto"):
+            try:
+                node = getattr(nm, node_name, None)
+                if node is None:
+                    continue
+                val = getattr(node, "value", None)
+                if val is None:
+                    continue
+                out[node_name] = {
+                    "value": str(val) if not isinstance(val, str) else val,
+                    "symbolics": getattr(node, "symbolics", None) or [],
+                    "writable": True,
+                }
+            except Exception:
+                pass
+        return out
+
+    def set_gentl_feature(self, name: str, value: Any) -> bool:
+        """
+        Define um parâmetro GenICam por nome (ex.: Gain, ExposureTime, ExposureAuto).
+        Retorna True se aplicado com sucesso.
+        """
+        nm = self.get_gentl_node_map()
+        if nm is None:
+            return False
+        try:
+            node = getattr(nm, name, None)
+            if node is None:
+                return False
+            node.value = value
+            return True
+        except Exception as e:
+            logger.warning("gentl_set_feature_failed", name=name, error=str(e))
+            return False
+
     def close(self) -> None:
         """Fecha a câmera e libera Harvester."""
         if self._ia is not None:

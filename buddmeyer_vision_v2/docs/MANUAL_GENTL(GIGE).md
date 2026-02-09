@@ -10,11 +10,12 @@ Documento que descreve tudo o que foi implementado e alterado para suporte à c�
 2. [Onde está a conexão de cada tipo de câmera](#2-onde-está-a-conexão-de-cada-tipo-de-câmera)
 3. [Câmera GenTL (Omron Sentech)](#3-câmera-gentl-omron-sentech)
 4. [Configuração e uso na interface](#4-configuração-e-uso-na-interface)
-5. [Proteções e desempenho (evitar travamentos)](#5-proteções-e-desempenho-evitar-travamentos)
-6. [Carregamento do modelo em segundo plano](#6-carregamento-do-modelo-em-segundo-plano)
-7. [FPS e gargalos](#7-fps-e-gargalos)
-8. [Referência rápida de arquivos](#8-referência-rápida-de-arquivos)
-9. [Guia rápido – Câmera STC-MCS2041POE](#9-guia-rápido--câmera-stc-mcs2041poe)
+5. [Tela de ajustes da câmera GenTL](#5-tela-de-ajustes-da-câmera-gentl)
+6. [Proteções e desempenho (evitar travamentos)](#6-proteções-e-desempenho-evitar-travamentos)
+7. [Carregamento do modelo em segundo plano](#7-carregamento-do-modelo-em-segundo-plano)
+8. [FPS e gargalos](#8-fps-e-gargalos)
+9. [Referência rápida de arquivos](#9-referência-rápida-de-arquivos)
+10. [Guia rápido – Câmera STC-MCS2041POE](#10-guia-rápido--câmera-stc-mcs2041poe)
 
 ---
 
@@ -24,6 +25,7 @@ Documento que descreve tudo o que foi implementado e alterado para suporte à c�
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Nova fonte GenTL**                     | Tipo de fonte "Câmera GenTL (Omron Sentech)" usando a biblioteca**Harvester** (GenICam/GenTL) e arquivo CTI do fabricante.                                                                            |
 | **Configuração GenTL**                 | CTI path, índice da câmera,**dimensão máxima** (redimensionamento) e **FPS alvo** configuráveis na aba Configuração e na Operação ("Selecionar CTI...").                                |
+| **Tela de ajustes da câmera GenTL**    | Com a fonte GenTL selecionada e o stream ativo, o botão **"Ajustes da câmera..."** abre um diálogo para gain, exposição (µs), ExposureAuto e GainAuto (GenICam).                         |
 | **Proteção na abertura**               | Remoção do `fetch()` em `open()` do adaptador GenTL para não travar a UI ao obter um frame 20MP na thread principal. Dimensões passam a ser obtidas no primeiro `read()` na thread do worker.      |
 | **Redimensionamento**                    | Frames grandes (ex.: 5472×3648) são redimensionados para um máximo configurável (ex.: 1920 px no lado maior) para não travar exibição e inferência. Limite de segurança mesmo com "Sem limite" (0). |
 | **Cache no widget de vídeo**            | Conversão numpy → QImage → QPixmap e escala passam a ser cacheadas; só recalculadas quando o frame ou o tamanho do widget mudam, reduzindo trabalho na thread principal.                                 |
@@ -125,28 +127,66 @@ A **factory** que escolhe o adaptador é a função **`create_adapter()`** no me
 - Ao clicar **Iniciar** com GenTL:
   - Se não houver CTI configurado, é exibida mensagem pedindo para usar "Selecionar CTI..." ou a Configuração.
   - Se o arquivo não existir, mensagem de erro orientando a selecionar de novo.
+- Com GenTL selecionado aparece também o botão **"Ajustes da câmera..."**, que abre a tela de configurações da câmera (gain, exposição, auto). Ver [seção 5](#5-tela-de-ajustes-da-câmera-gentl).
 
 ### 4.3 Uso típico
 
 1. Instalar dependência: `pip install harvesters` (já em `requirements.txt`).
 2. **Configuração** (opcional, para persistir): Tipo "Câmera GenTL (Omron Sentech)", Procurar… → escolher o .cti, ajustar dimensão máx. e FPS alvo, Salvar.
 3. **Operação**: Fonte "Câmera GenTL (Omron Sentech)", se necessário "Selecionar CTI...", depois **Iniciar**.
+4. Com o stream ativo, use **"Ajustes da câmera..."** para ajustar gain, exposição e modos automáticos na câmera.
 
 ---
 
-## 5. Proteções e desempenho (evitar travamentos)
+## 5. Tela de ajustes da câmera GenTL
 
-### 5.1 Nenhum fetch no `open()` GenTL
+Quando a fonte selecionada é **Câmera GenTL (Omron Sentech)**, na aba **Operação** aparece o botão **"Ajustes da câmera..."**. Essa tela permite ajustar parâmetros GenICam da câmera (gain, tempo de exposição, auto exposure, auto gain) enquanto o stream está ativo.
+
+### 5.1 Quando usar
+
+- **Requisito:** o stream deve estar **iniciado** com a câmera GenTL. Se você clicar em "Ajustes da câmera..." sem ter clicado em **Iniciar** antes, o sistema informa: *"Inicie o stream com a câmera GenTL (Omron Sentech) para poder ajustar gain, exposição e outros parâmetros."*
+- Os ajustes são enviados diretamente à câmera via GenICam (node map). As câmeras Omron Sentech STC suportam, em geral, **Gain** (ex.: 0–22 dB), **ExposureTime** ou **ExposureTimeAbs** (µs), **ExposureAuto** e **GainAuto** (Off, Once, Continuous).
+
+### 5.2 Conteúdo da tela
+
+- **Exposição**
+  - **Tempo (µs):** tempo de exposição em microssegundos (valor lido/escrito no nó `ExposureTimeAbs` ou `ExposureTime`, conforme suporte da câmera).
+  - **Auto:** modo de exposição automática (Off, Once, Continuous), se a câmera expuser o nó `ExposureAuto`.
+- **Ganho**
+  - **Ganho:** valor numérico de gain (ex.: 0–22 para algumas STC).
+  - **Auto:** modo de ganho automático (Off, Once, Continuous), se a câmera expuser o nó `GainAuto`.
+
+Botões:
+
+- **Atualizar da câmera:** lê os valores atuais da câmera e atualiza os campos da tela.
+- **Aplicar:** envia os valores atuais dos campos para a câmera (e exibe confirmação).
+- **Fechar:** fecha o diálogo (as alterações já aplicadas permanecem na câmera).
+
+### 5.3 Onde está no código
+
+- **Diálogo:** `ui/widgets/gentl_camera_settings_dialog.py` — classe `GenTLCameraSettingsDialog`; recebe o adaptador GenTL e usa `get_gentl_features()` e `set_gentl_feature()` do adaptador.
+- **Adaptador GenTL:** em `streaming/source_adapters.py`, a classe `GenTLHarvesterAdapter` expõe:
+  - `get_gentl_node_map()`: retorna o node map GenICam.
+  - `get_gentl_features()`: lê Gain, ExposureTime/ExposureTimeAbs, ExposureAuto, GainAuto (apenas os que existirem no device).
+  - `set_gentl_feature(name, value)`: define um nó por nome.
+- **Stream manager:** `streaming/stream_manager.py` — método `get_gentl_adapter()` retorna o adaptador GenTL atual quando o stream está rodando com fonte GenTL.
+- **Operação:** em `ui/pages/operation_page.py`, o botão "Ajustes da câmera..." chama `_open_gentl_camera_settings()`, que obtém o adaptador via `get_gentl_adapter()` e abre o diálogo.
+
+---
+
+## 6. Proteções e desempenho (evitar travamentos)
+
+### 6.1 Nenhum fetch no `open()` GenTL
 
 - **Problema:** Fazer `fetch()` em `open()` (na thread principal) para ler dimensões trazia um frame 5472×3648 e travava a UI.
 - **Solução:** Em `open()` só se faz `create()`, `start()` e log. As dimensões são definidas no primeiro `read()` (na thread do worker). Log `gentl_first_frame` mostra resolução nativa e de saída.
 
-### 5.2 Redimensionamento e limite de segurança
+### 6.2 Redimensionamento e limite de segurança
 
 - Frames com lado maior que **max_dimension** (ou que 1920 quando max_dimension é 0) são redimensionados com `cv2.resize(..., INTER_AREA)`.
 - **Limite de segurança:** mesmo com "Dimensão máx. = 0", o lado maior não ultrapassa 1920 px (constante `_SAFETY_MAX_DIMENSION` em `GenTLHarvesterAdapter`).
 
-### 5.3 Cache no widget de vídeo
+### 6.3 Cache no widget de vídeo
 
 **Arquivo:** `buddmeyer_vision_v2/ui/widgets/video_widget.py`
 
@@ -155,13 +195,13 @@ A **factory** que escolhe o adaptador é a função **`create_adapter()`** no me
 
 ---
 
-## 6. Carregamento do modelo em segundo plano
+## 7. Carregamento do modelo em segundo plano
 
-### 6.1 Objetivo
+### 7.1 Objetivo
 
 - Evitar que a UI trave durante o carregamento do modelo RT-DETR (pesos e pré-processador).
 
-### 6.2 Implementação
+### 7.2 Implementação
 
 **Arquivo:** `buddmeyer_vision_v2/ui/pages/operation_page.py`
 
@@ -185,15 +225,15 @@ A **factory** que escolhe o adaptador é a função **`create_adapter()`** no me
 
 ---
 
-## 7. FPS e gargalos
+## 8. FPS e gargalos
 
-### 7.1 Por que o FPS real pode ser ~4 com GenTL
+### 8.1 Por que o FPS real pode ser ~4 com GenTL
 
 - **gentl_target_fps** (ex.: 10) define o **máximo** desejado (intervalo entre capturas no StreamWorker).
 - Cada frame exige: **fetch** (5472×3648) + **reshape** + **cvtColor** + **resize** para 1920 (ou menor). O **resize** de ~20 MP por frame é pesado na CPU.
 - Se o tempo total por frame for ~250 ms, o FPS real fica ~4, independente do target_fps.
 
-### 7.2 O que ajustar para aumentar FPS
+### 8.2 O que ajustar para aumentar FPS
 
 1. **Dimensão máx. (px):** reduzir (ex.: 960 ou 640) para menos pixels no resize e mais FPS.
 2. **Resolução nativa da câmera:** se a câmera permitir modo de menor resolução, menos dados por frame.
@@ -201,22 +241,23 @@ A **factory** que escolhe o adaptador é a função **`create_adapter()`** no me
 
 ---
 
-## 8. Referência rápida de arquivos
+## 9. Referência rápida de arquivos
 
 | Arquivo                                  | Alterações / conteúdo                                                                                                                                                                                       |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **streaming/source_adapters.py**   | `SourceType.GENTL`, `GenTLHarvesterAdapter` (open sem fetch, read com resize e log `gentl_first_frame`), `create_adapter` com parâmetros GenTL, limite de segurança 1920.                            |
-| **streaming/stream_manager.py**    | `change_source` e `_start_with_current_settings` com `gentl_*`, validação de CTI para GenTL, `create_adapter(..., gentl_max_dimension, gentl_target_fps)`.                                           |
+| **streaming/source_adapters.py**   | `SourceType.GENTL`, `GenTLHarvesterAdapter` (open sem fetch, read com resize, `get_gentl_features`/`set_gentl_feature`/`get_gentl_node_map` para ajustes), `create_adapter` com parâmetros GenTL, limite de segurança 1920. |
+| **streaming/stream_manager.py**    | `change_source` e `_start_with_current_settings` com `gentl_*`, validação de CTI para GenTL, `get_gentl_adapter()` para a tela de ajustes, `create_adapter(..., gentl_max_dimension, gentl_target_fps)`. |
 | **config/settings.py**             | `StreamingSettings`: `gentl_cti_path`, `gentl_device_index`, `gentl_max_dimension`, `gentl_target_fps`; `source_type` válido inclui `"gentl"`.                                                  |
 | **ui/pages/configuration_page.py** | Combo com "Câmera GenTL (Omron Sentech)", grupo GenTL (CTI, índice, dimensão máx., FPS alvo), load/save e `_browse_gentl_cti`.                                                                           |
-| **ui/pages/operation_page.py**     | Combo e legenda GenTL, botão "Selecionar CTI...", validação de CTI ao iniciar,`_ModelLoaderWorker`, carregamento do modelo em QThread, `_on_model_load_finished`, `_finish_start_system_after_model`. |
-| **ui/widgets/video_widget.py**     | Cache de QPixmap/tamanho/shape;`_ensure_cached_pixmap()`, `resizeEvent` invalidando cache.                                                                                                                 |
+| **ui/pages/operation_page.py**     | Combo e legenda GenTL, botões "Selecionar CTI..." e "Ajustes da câmera...", validação de CTI ao iniciar, `_open_gentl_camera_settings`, `_ModelLoaderWorker`, carregamento do modelo em QThread. |
+| **ui/widgets/video_widget.py**     | Cache de QPixmap/tamanho/shape; `_ensure_cached_pixmap()`, `resizeEvent` invalidando cache.                                                                                                                |
+| **ui/widgets/gentl_camera_settings_dialog.py** | Diálogo "Ajustes da câmera GenTL": gain, exposição (µs), ExposureAuto, GainAuto; usa `get_gentl_features` e `set_gentl_feature` do adaptador. |
 | **core/logger.py**                 | Timestamp com `datetime.now(timezone.utc)` em vez de `utcnow()`.                                                                                                                                           |
 | **requirements.txt**               | Entrada `harvesters>=2.3.0`.                                                                                                                                                                                 |
 
 ---
 
-## 9. Guia rápido – Câmera STC-MCS2041POE
+## 10. Guia rápido – Câmera STC-MCS2041POE
 
 Guia de configuração e uso da câmera **STC-MCS2041POE** (Omron Sentech) com Python e Harvester.
 

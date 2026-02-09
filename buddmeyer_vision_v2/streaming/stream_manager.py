@@ -16,7 +16,7 @@ from core.logger import get_logger
 from core.metrics import MetricsCollector
 from core.exceptions import StreamError
 
-from .source_adapters import BaseSourceAdapter, SourceType, create_adapter
+from .source_adapters import BaseSourceAdapter, SourceType, create_adapter, GenTLHarvesterAdapter
 from .frame_buffer import FrameBuffer, FrameInfo
 from .stream_health import StreamHealth, HealthStatus
 
@@ -212,6 +212,17 @@ class StreamManager(QObject):
         logger.info("stream_stopped")
         self.stream_stopped.emit()
     
+    def get_gentl_adapter(self) -> Optional[Any]:
+        """
+        Retorna o adaptador GenTL atual, se o stream estiver rodando com fonte GenTL.
+        Usado pela UI para abrir a tela de ajustes da câmera (gain, exposure, etc.).
+        """
+        if not self._is_running or self._adapter is None:
+            return None
+        if isinstance(self._adapter, GenTLHarvesterAdapter):
+            return self._adapter
+        return None
+
     def pause(self) -> None:
         """Pausa o streaming."""
         if self._worker is not None:

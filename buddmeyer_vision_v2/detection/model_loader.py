@@ -3,6 +3,7 @@
 Carregador de modelos de detecção DETR/RT-DETR.
 """
 
+import warnings
 from pathlib import Path
 from typing import Optional, Tuple, Any, Dict
 import torch
@@ -93,11 +94,13 @@ class ModelLoader:
                 model_source = model_path
                 logger.info("loading_hf_model", model_id=model_source)
             
-            # Carrega processador
-            self._processor = AutoImageProcessor.from_pretrained(model_source)
-            
-            # Carrega modelo
-            self._model = AutoModelForObjectDetection.from_pretrained(model_source)
+            # Suprime UserWarnings durante o carregamento (PyTorch/timm "assign=True", etc.)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                # Carrega processador (use_fast=True evita aviso "slow processor" e acelera pré-processamento)
+                self._processor = AutoImageProcessor.from_pretrained(model_source, use_fast=True)
+                # Carrega modelo (backbone timm pode ser baixado do hub na primeira vez)
+                self._model = AutoModelForObjectDetection.from_pretrained(model_source)
             self._model.to(self._device)
             self._model.eval()
             
