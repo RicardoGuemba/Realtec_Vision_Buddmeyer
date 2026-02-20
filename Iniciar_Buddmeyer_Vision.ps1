@@ -3,8 +3,8 @@
 
 $ErrorActionPreference = "Stop"
 
-# Diretório do projeto
-$ProjectDir = "C:\Vision_Buddmeyer_PySide"
+# Diretório do projeto (onde está este script)
+$ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Muda para o diretório do projeto
 Set-Location $ProjectDir

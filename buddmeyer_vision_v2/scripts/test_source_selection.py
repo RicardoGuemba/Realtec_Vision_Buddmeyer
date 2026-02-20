@@ -77,10 +77,10 @@ def test_settings_reload_overwrites():
 def test_change_source_updates_memory():
     """
     Valida que change_source() atualiza o source_type em memória
-    para todas as 4 fontes.
+    para USB e GigE.
     """
     print("=" * 60)
-    print("TESTE 3: change_source() atualiza memória para cada tipo")
+    print("TESTE 3: change_source() atualiza memória (USB e GigE)")
     print("=" * 60)
     
     from streaming import StreamManager
@@ -90,9 +90,7 @@ def test_change_source_updates_memory():
     original = settings.streaming.source_type
     
     test_cases = [
-        ("video", {"video_path": "test.mp4"}),
         ("usb", {"camera_index": 0}),
-        ("rtsp", {"rtsp_url": "rtsp://test"}),
         ("gige", {"gige_ip": "192.168.1.100", "gige_port": 3956}),
     ]
     

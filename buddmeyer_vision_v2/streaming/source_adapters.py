@@ -5,7 +5,6 @@ Adaptadores de fonte de vídeo para diferentes tipos de entrada.
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from pathlib import Path
 from typing import Optional, Dict, Any
 import time
 
@@ -20,11 +19,9 @@ logger = get_logger("streaming.adapters")
 
 
 class SourceType(str, Enum):
-    """Tipos de fonte de vídeo suportados."""
-    
-    VIDEO = "video"   # Arquivo MP4, AVI, MOV
+    """Tipos de fonte de vídeo suportados — apenas câmeras reais."""
+
     USB = "usb"       # Câmera USB/USB-C
-    RTSP = "rtsp"     # Stream RTSP
     GIGE = "gige"     # Câmera GigE (Gigabit Ethernet)
 
 
@@ -104,110 +101,6 @@ class BaseSourceAdapter(ABC):
         )
 
 
-class VideoFileAdapter(BaseSourceAdapter):
-    """
-    Adaptador para arquivos de vídeo (MP4, AVI, MOV).
-    
-    Suporta loop de vídeo.
-    """
-    
-    def __init__(self, video_path: str, loop: bool = True):
-        """
-        Inicializa o adaptador.
-        
-        Args:
-            video_path: Caminho para o arquivo de vídeo
-            loop: Se True, reinicia o vídeo ao terminar
-        """
-        super().__init__(SourceType.VIDEO)
-        self.video_path = Path(video_path)
-        self.loop = loop
-        self._total_frames = 0
-    
-    def open(self) -> bool:
-        """Abre o arquivo de vídeo."""
-        if not self.video_path.exists():
-            logger.error("video_not_found", path=str(self.video_path))
-            raise StreamSourceError(
-                f"Arquivo de vídeo não encontrado: {self.video_path}",
-                {"path": str(self.video_path)}
-            )
-        
-        self._capture = cv2.VideoCapture(str(self.video_path))
-        
-        if not self._capture.isOpened():
-            logger.error("video_open_failed", path=str(self.video_path))
-            raise StreamSourceError(
-                f"Não foi possível abrir o vídeo: {self.video_path}",
-                {"path": str(self.video_path)}
-            )
-        
-        self._is_open = True
-        self._start_time = time.time()
-        self._total_frames = int(self._capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        
-        props = self.get_properties()
-        logger.info(
-            "video_opened",
-            path=str(self.video_path),
-            width=props["width"],
-            height=props["height"],
-            fps=props["fps"],
-            total_frames=self._total_frames,
-        )
-        
-        return True
-    
-    def read(self) -> Optional[FrameInfo]:
-        """Lê um frame do vídeo."""
-        if not self._is_open or self._capture is None:
-            return None
-        
-        ret, frame = self._capture.read()
-        
-        if not ret:
-            if self.loop:
-                # Reinicia o vídeo
-                self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = self._capture.read()
-                if not ret:
-                    return None
-                logger.debug("video_looped", path=str(self.video_path))
-            else:
-                logger.info("video_ended", path=str(self.video_path))
-                return None
-        
-        return self._create_frame_info(frame)
-    
-    def seek(self, frame_number: int) -> bool:
-        """
-        Pula para um frame específico.
-        
-        Args:
-            frame_number: Número do frame
-        
-        Returns:
-            True se bem sucedido
-        """
-        if not self._is_open or self._capture is None:
-            return False
-        
-        self._capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-        return True
-    
-    @property
-    def current_position(self) -> int:
-        """Retorna posição atual no vídeo."""
-        if self._capture is None:
-            return 0
-        return int(self._capture.get(cv2.CAP_PROP_POS_FRAMES))
-    
-    @property
-    def total_frames(self) -> int:
-        """Retorna total de frames do vídeo."""
-        return self._total_frames
-
-
 class USBCameraAdapter(BaseSourceAdapter):
     """
     Adaptador para câmeras USB/USB-C.
@@ -269,65 +162,6 @@ class USBCameraAdapter(BaseSourceAdapter):
         
         if not ret:
             logger.warning("usb_camera_read_failed", index=self.camera_index)
-            return None
-        
-        return self._create_frame_info(frame)
-
-
-class RTSPAdapter(BaseSourceAdapter):
-    """
-    Adaptador para streams RTSP.
-    """
-    
-    def __init__(self, url: str, buffer_size: int = 1):
-        """
-        Inicializa o adaptador.
-        
-        Args:
-            url: URL do stream RTSP
-            buffer_size: Tamanho do buffer (1 = mínimo para menor latência)
-        """
-        super().__init__(SourceType.RTSP)
-        self.url = url
-        self.buffer_size = buffer_size
-    
-    def open(self) -> bool:
-        """Abre o stream RTSP."""
-        # Configurações para menor latência
-        self._capture = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
-        
-        if not self._capture.isOpened():
-            logger.error("rtsp_open_failed", url=self.url)
-            raise StreamSourceError(
-                f"Não foi possível abrir stream RTSP: {self.url}",
-                {"url": self.url}
-            )
-        
-        # Buffer mínimo para menor latência
-        self._capture.set(cv2.CAP_PROP_BUFFERSIZE, self.buffer_size)
-        
-        self._is_open = True
-        self._start_time = time.time()
-        
-        props = self.get_properties()
-        logger.info(
-            "rtsp_opened",
-            url=self.url,
-            width=props.get("width"),
-            height=props.get("height"),
-        )
-        
-        return True
-    
-    def read(self) -> Optional[FrameInfo]:
-        """Lê um frame do stream."""
-        if not self._is_open or self._capture is None:
-            return None
-        
-        ret, frame = self._capture.read()
-        
-        if not ret:
-            logger.warning("rtsp_read_failed", url=self.url)
             return None
         
         return self._create_frame_info(frame)
@@ -407,38 +241,19 @@ class GigECameraAdapter(BaseSourceAdapter):
 
 def create_adapter(
     source_type: str,
-    video_path: str = "",
     camera_index: int = 0,
-    rtsp_url: str = "",
     gige_ip: str = "",
     gige_port: int = 3956,
-    loop_video: bool = True,
     **kwargs
 ) -> BaseSourceAdapter:
     """
-    Factory para criar adaptadores de fonte.
-    
-    Args:
-        source_type: Tipo de fonte (video, usb, rtsp, gige)
-        video_path: Caminho para arquivo de vídeo
-        camera_index: Índice da câmera USB
-        rtsp_url: URL do stream RTSP
-        gige_ip: IP da câmera GigE
-        gige_port: Porta da câmera GigE
-        loop_video: Se True, faz loop do vídeo
-    
-    Returns:
-        Instância do adaptador apropriado
+    Factory para criar adaptadores de fonte (somente câmeras USB e GigE).
     """
     source = SourceType(source_type)
-    
-    if source == SourceType.VIDEO:
-        return VideoFileAdapter(video_path, loop=loop_video)
-    elif source == SourceType.USB:
+
+    if source == SourceType.USB:
         return USBCameraAdapter(camera_index)
-    elif source == SourceType.RTSP:
-        return RTSPAdapter(rtsp_url)
     elif source == SourceType.GIGE:
         return GigECameraAdapter(gige_ip, gige_port)
     else:
-        raise ValueError(f"Tipo de fonte não suportado: {source_type}")
+        raise ValueError(f"Tipo de fonte não suportado: {source_type}. Use: usb, gige")

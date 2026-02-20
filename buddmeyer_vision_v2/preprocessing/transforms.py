@@ -4,6 +4,25 @@ Transformações de imagem para pré-processamento.
 """
 
 from typing import Tuple, Optional
+
+
+def pixel_to_mm(centroid_px: Tuple[float, float], mm_per_pixel: float) -> Tuple[float, float]:
+    """
+    Converte coordenadas de pixel para milímetros.
+
+    Args:
+        centroid_px: Tupla (u, v) em pixels do frame.
+        mm_per_pixel: Relação mm/pixel (calibração espacial). 1.0 = identidade (px = mm).
+
+    Returns:
+        Tupla (u, v) em milímetros quando mm_per_pixel > 0.
+    """
+    if mm_per_pixel <= 0:
+        return centroid_px
+    return (
+        centroid_px[0] * mm_per_pixel,
+        centroid_px[1] * mm_per_pixel,
+    )
 import numpy as np
 import cv2
 

@@ -14,21 +14,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class StreamingSettings(BaseModel):
-    """Configurações de streaming de vídeo."""
-    
-    source_type: str = Field(default="usb", description="Tipo: video, usb, rtsp, gige. Padrão: usb (câmera na porta USB).")
-    video_path: str = Field(default="videos/test.mp4", description="Caminho do arquivo de vídeo")
-    usb_camera_index: int = Field(default=0, description="Índice da câmera USB (0 = primeira câmera)")
-    rtsp_url: str = Field(default="", description="URL do stream RTSP")
+    """Configurações de streaming — somente câmeras USB e GigE."""
+
+    model_config = {"extra": "ignore"}  # Ignora video_path, rtsp_url, loop_video em configs antigos
+
+    source_type: str = Field(default="usb", description="Tipo: usb ou gige")
+    usb_camera_index: int = Field(default=0, description="Índice da câmera USB (0 = primeira)")
     gige_ip: str = Field(default="", description="IP da câmera GigE")
     gige_port: int = Field(default=3956, description="Porta da câmera GigE")
     max_frame_buffer_size: int = Field(default=30, description="Tamanho máximo do buffer")
-    loop_video: bool = Field(default=True, description="Loop do vídeo")
-    
+
     @field_validator("source_type")
     @classmethod
     def validate_source_type(cls, v: str) -> str:
-        valid_types = {"video", "usb", "rtsp", "gige"}
+        valid_types = {"usb", "gige"}
         if v not in valid_types:
             raise ValueError(f"source_type deve ser um de: {valid_types}")
         return v
@@ -56,11 +55,17 @@ class DetectionSettings(BaseModel):
 
 class PreprocessSettings(BaseModel):
     """Configurações de pré-processamento."""
-    
+
     profile: str = Field(default="default", description="Perfil de pré-processamento")
     brightness: float = Field(default=0.0, ge=-1.0, le=1.0, description="Ajuste de brilho")
     contrast: float = Field(default=0.0, ge=-1.0, le=1.0, description="Ajuste de contraste")
     roi: Optional[List[int]] = Field(default=None, description="ROI [x, y, width, height]")
+    mm_per_pixel: float = Field(
+        default=1.0,
+        ge=0.001,
+        le=1000.0,
+        description="Relação mm/pixel: quando > 0, coordenadas (u,v) do centroide são exibidas em mm",
+    )
 
 
 class CIPSettings(BaseModel):
@@ -128,11 +133,27 @@ class TagSettings(BaseModel):
 
 
 class OutputSettings(BaseModel):
-    """Configurações de saída RTSP."""
-    
+    """Configurações de saída (RTSP e stream MJPEG web)."""
+
     rtsp_enabled: bool = Field(default=False, description="RTSP Server habilitado")
     rtsp_port: int = Field(default=8554, description="Porta RTSP")
     rtsp_path: str = Field(default="/stream", description="Path RTSP")
+
+    # Stream MJPEG over HTTP (supervisório web)
+    stream_http_enabled: bool = Field(
+        default=True,
+        description="Stream MJPEG habilitado para visualização web em tempo real",
+    )
+    stream_http_port: int = Field(
+        default=8765,
+        description="Porta do stream MJPEG (URL: http://<IP>:porta/stream)",
+    )
+    stream_http_fps: int = Field(
+        default=10,
+        ge=1,
+        le=30,
+        description="FPS do stream MJPEG para economizar CPU/rede",
+    )
 
 
 class Settings(BaseSettings):

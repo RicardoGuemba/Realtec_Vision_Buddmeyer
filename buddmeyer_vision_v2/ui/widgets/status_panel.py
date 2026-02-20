@@ -12,9 +12,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont, QColor
 
+from config import get_settings
 from detection.events import DetectionEvent
 from communication.connection_state import ConnectionState, ConnectionStatus
 from control.robot_controller import RobotControlState
+from preprocessing.transforms import pixel_to_mm
 
 
 class StatusIndicator(QFrame):
@@ -285,8 +287,10 @@ class StatusPanel(QWidget):
         if event.detected:
             self._det_class.setText(event.class_name)
             self._det_confidence.setText(f"{event.confidence:.1%}")
-            self._det_x.setText(f"{event.centroid[0]:.1f}")
-            self._det_y.setText(f"{event.centroid[1]:.1f}")
+            mm_per_px = get_settings().preprocess.mm_per_pixel
+            cx, cy = pixel_to_mm(event.centroid, mm_per_px)
+            self._det_x.setText(f"{cx:.2f}")
+            self._det_y.setText(f"{cy:.2f}")
         else:
             self._det_class.setText("---")
             self._det_confidence.setText("---")

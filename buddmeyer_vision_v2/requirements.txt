@@ -38,8 +38,7 @@ psutil>=5.9.0
 # Gráficos (opcional)
 matplotlib>=3.8.0
 
-# Desenvolvimento (opcional)
-# pytest>=8.0.0
-# pytest-qt>=4.3.0
+# Desenvolvimento / Testes
+pytest>=8.0.0
 # black>=24.1.0
 # ruff>=0.2.0

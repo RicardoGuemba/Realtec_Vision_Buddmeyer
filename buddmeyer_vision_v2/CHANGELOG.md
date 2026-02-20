@@ -1,6 +1,36 @@
 # Changelog
 
-## [Unreleased] – Correções de comunicação e fluxo básico PC ↔ CLP
+## [Unreleased] – Testes unitários e oportunidades de melhoria
+
+### Adicionado
+
+- **Testes unitários (pytest):** 73 testes em `tests/unit/` para config, core.exceptions, detection.events, detection.postprocess, preprocessing.transforms, preprocessing.roi_manager, streaming.frame_buffer, communication.connection_state, output.mjpeg_stream.
+- **docs/OPORTUNIDADES_DE_MELHORIA.md:** Documento com 19 oportunidades de melhoria priorizadas (robustez, segurança industrial, observabilidade, testes, config, performance).
+- **pytest** em requirements.txt para execução de testes.
+
+---
+
+## Calibração mm/px, higienização e refatoração (anterior)
+
+### Adicionado
+
+- **Calibração espacial (mm/pixel):** Campo na aba Pré-processamento para informar a relação mm/px. Quando configurado, as coordenadas (u, v) do centroide são exibidas e enviadas ao CLP em milímetros. Valor padrão 1 mantém compatibilidade.
+- **Função `pixel_to_mm`** em `preprocessing/transforms.py` para conversão de coordenadas.
+
+### Removido
+
+- **detection_overlay.py:** Widget não utilizado (VideoWidget desenha overlay internamente).
+- **preprocess_config.py:** Configurações duplicadas; uso consolidado em PreprocessSettings.
+- **README_INSTALLER.md, RESUMO_INSTALADOR_COMPLETO.md:** Documentação de instalador consolidada.
+- **models/README_MODELO.md:** Conteúdo mergeado em models/README.md.
+
+### Alterado
+
+- Documentação atualizada (DOCUMENTACAO_COMPLETA, USO_E_ABAS) para refletir calibração e estrutura atual.
+
+---
+
+## Correções de comunicação e fluxo básico PC ↔ CLP (anterior)
 
 ### Corrigido
 

@@ -4,11 +4,12 @@ Página de Operação - Aba principal para operação do sistema.
 """
 
 import asyncio
-from pathlib import Path
+from typing import Optional
 
+import numpy as np
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QPushButton, QComboBox, QLabel, QFileDialog,
+    QPushButton, QComboBox, QLabel,
     QSplitter, QGroupBox, QCheckBox
 )
 from PySide6.QtCore import Qt, Slot, QTimer
@@ -17,6 +18,8 @@ from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from config import get_settings
 from core.logger import get_logger
 from core.metrics import MetricsCollector
+from output import StreamFrameProvider, MjpegStreamServer
+from preprocessing.transforms import pixel_to_mm
 from streaming import StreamManager
 from detection import InferenceEngine
 from communication import CIPClient
@@ -49,7 +52,11 @@ class OperationPage(QWidget):
         self._robot_controller = RobotController()
         
         self._is_running = False
-        
+
+        # Stream MJPEG para supervisório web
+        self._stream_provider = StreamFrameProvider()
+        self._mjpeg_server: Optional[MjpegStreamServer] = None
+
         # Contador de frames para comunicação periódica com CLP
         self._frame_count = 0
         self._communication_interval = 25  # Comunicar a cada 25 frames
@@ -154,24 +161,13 @@ class OperationPage(QWidget):
         controls_layout.setContentsMargins(12, 8, 12, 8)
         controls_layout.setSpacing(12)
         
-        # Seletor de fonte
+        # Seletor de fonte (apenas câmeras USB e GigE)
         controls_layout.addWidget(QLabel("Fonte:"))
-        
         self._source_combo = QComboBox()
         self._source_combo.setMinimumWidth(150)
-        self._source_combo.addItems([
-            "Arquivo de Vídeo",
-            "Câmera USB",
-            "Stream RTSP",
-            "Câmera GigE",
-        ])
+        self._source_combo.addItems(["Câmera USB", "Câmera GigE"])
         self._source_combo.currentIndexChanged.connect(self._on_source_changed)
         controls_layout.addWidget(self._source_combo)
-        
-        self._source_path_btn = QPushButton("Selecionar...")
-        self._source_path_btn.clicked.connect(self._select_video_file)
-        controls_layout.addWidget(self._source_path_btn)
-        
         controls_layout.addStretch()
         
         # Botões de controle
@@ -304,33 +300,26 @@ class OperationPage(QWidget):
     
     def _sync_combo_to_settings(self) -> None:
         """Sincroniza o combo de fonte com o source_type do settings."""
-        source_type_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3}
-        current_source = self._settings.streaming.source_type
-        combo_index = source_type_map.get(current_source, 1)  # 1 = usb como padrão
+        source_type_map = {"usb": 0, "gige": 1}
+        combo_index = source_type_map.get(self._settings.streaming.source_type, 0)
         self._source_combo.setCurrentIndex(combo_index)
-        # Atualiza visibilidade do botão de seleção de arquivo
-        self._source_path_btn.setVisible(combo_index == 0)
         self._update_source_caption()
-    
+
     def _update_source_caption(self) -> None:
         """Atualiza a legenda da fonte atual (abaixo do vídeo)."""
         idx = self._source_combo.currentIndex()
         if idx == 0:
-            path = self._settings.streaming.video_path or "—"
-            name = Path(path).name if path != "—" else path
-            self._source_caption.setText(f"Fonte: Arquivo de vídeo — {name}")
-        elif idx == 1:
             cam = self._settings.streaming.usb_camera_index
             self._source_caption.setText(f"Fonte: Câmera USB (índice {cam})")
-        elif idx == 2:
-            self._source_caption.setText("Fonte: Stream RTSP")
         else:
-            self._source_caption.setText("Fonte: Câmera GigE")
+            ip = self._settings.streaming.gige_ip or "—"
+            self._source_caption.setText(f"Fonte: Câmera GigE — {ip}")
     
     def _connect_signals(self) -> None:
         """Conecta os sinais."""
         # Stream
         self._stream_manager.frame_available.connect(self._video_widget.update_frame)
+        self._stream_manager.frame_available.connect(self._on_frame_for_stream)
         self._stream_manager.frame_info_available.connect(self._on_frame_available)
         self._stream_manager.stream_started.connect(self._on_stream_started)
         self._stream_manager.stream_stopped.connect(self._on_stream_stopped)
@@ -338,6 +327,7 @@ class OperationPage(QWidget):
         
         # Inferência
         self._inference_engine.detection_result.connect(self._video_widget.update_detections)
+        self._inference_engine.detection_result.connect(self._on_detection_for_stream)
         self._inference_engine.detection_event.connect(self._on_detection)
         
         # CIP
@@ -376,93 +366,33 @@ class OperationPage(QWidget):
         """Inicia o sistema."""
         if self._is_running:
             return
-        
-        # Determina fonte selecionada na UI
-        source_types = ["video", "usb", "rtsp", "gige"]
-        source_labels = ["Arquivo de Vídeo", "Câmera USB", "Stream RTSP", "Câmera GigE"]
+
+        source_types = ["usb", "gige"]
+        source_labels = ["Câmera USB", "Câmera GigE"]
         source_index = self._source_combo.currentIndex()
         source_type = source_types[source_index]
-        
+
         self._event_console.add_info(
             f"Iniciando sistema com fonte: {source_labels[source_index]}..."
         )
         self._logger.info("start_system_requested", source_type=source_type)
-        
-        # Atualiza fonte em memória
+
         self._settings.streaming.source_type = source_type
-        
-        # Validação prévia específica para vídeo (arquivo)
-        if source_type == "video":
-            video_path_str = self._settings.streaming.video_path
-            video_path = Path(video_path_str)
-            
-            # Normaliza caminho (resolve relativos e absolutos)
-            if not video_path.is_absolute():
-                base_path = Path(__file__).parent.parent.parent
-                video_path = base_path / video_path_str
-            
-            try:
-                video_path = video_path.resolve()
-            except Exception as e:
-                self._logger.warning("path_resolve_failed", path=str(video_path), error=str(e))
-            
-            # Verifica se arquivo existe
-            if not video_path.exists():
-                error_msg = (
-                    f"Arquivo de vídeo não encontrado:\n"
-                    f"{video_path}\n\n"
-                    f"Por favor, selecione um arquivo válido usando o botão 'Selecionar...'"
+
+        # Validação GigE: IP obrigatório
+        if source_type == "gige":
+            if not self._settings.streaming.gige_ip.strip():
+                self._event_console.add_error(
+                    "Configure o IP da câmera GigE em Configuração → Fonte de Vídeo"
                 )
-                self._event_console.add_error(error_msg)
-                self._logger.error("video_not_found_on_start", path=str(video_path))
                 return
-            
-            # Verifica se é um arquivo válido (não é diretório)
-            if not video_path.is_file():
-                error_msg = f"O caminho especificado não é um arquivo: {video_path}"
-                self._event_console.add_error(error_msg)
-                self._logger.error("video_path_is_not_file", path=str(video_path))
-                return
-            
-            # Testa se OpenCV consegue abrir o arquivo
-            import cv2
-            test_cap = cv2.VideoCapture(str(video_path))
-            if not test_cap.isOpened():
-                test_cap.release()
-                error_msg = (
-                    f"Não foi possível abrir o arquivo de vídeo:\n"
-                    f"{video_path}\n\n"
-                    f"O arquivo pode estar corrompido ou em formato não suportado.\n"
-                    f"Formatos suportados: MP4, AVI, MOV, MKV"
-                )
-                self._event_console.add_error(error_msg)
-                self._logger.error("video_cannot_open", path=str(video_path))
-                return
-            test_cap.release()
-            
-            # Atualiza com caminho normalizado
-            self._settings.streaming.video_path = str(video_path)
-            self._logger.info("video_validated", path=str(video_path))
-        
-        # Atualiza configuração do StreamManager com os parâmetros da fonte
-        # change_source() atualiza o singleton em memória; start() usará esses valores
-        if source_type == "video":
-            self._stream_manager.change_source(
-                source_type=source_type,
-                video_path=self._settings.streaming.video_path,
-                loop_video=self._settings.streaming.loop_video,
-            )
-        elif source_type == "usb":
+
+        if source_type == "usb":
             self._stream_manager.change_source(
                 source_type=source_type,
                 camera_index=self._settings.streaming.usb_camera_index,
             )
-        elif source_type == "rtsp":
-            self._stream_manager.change_source(
-                source_type=source_type,
-                rtsp_url=self._settings.streaming.rtsp_url,
-            )
-        elif source_type == "gige":
+        else:
             self._stream_manager.change_source(
                 source_type=source_type,
                 gige_ip=self._settings.streaming.gige_ip,
@@ -505,7 +435,23 @@ class OperationPage(QWidget):
         
         self._is_running = True
         self._update_ui_state()
-        
+
+        # Inicia stream MJPEG para supervisório web (se habilitado)
+        if self._settings.output.stream_http_enabled:
+            self._mjpeg_server = MjpegStreamServer(
+                self._stream_provider,
+                port=self._settings.output.stream_http_port,
+                fps=self._settings.output.stream_http_fps,
+            )
+            if self._mjpeg_server.start():
+                host = "localhost"  # Usuário verá IP real na rede
+                self._event_console.add_info(
+                    f"Stream web: http://<IP>:{self._settings.output.stream_http_port}/stream"
+                )
+            else:
+                self._mjpeg_server = None
+                self._event_console.add_warning("Stream MJPEG não iniciado (porta em uso?)")
+
         self._event_console.add_success(
             f"Sistema iniciado [{source_labels[source_index]}]"
         )
@@ -586,8 +532,9 @@ class OperationPage(QWidget):
             return
         
         detection = self._last_best_detection
-        centroid_x = detection.centroid[0]
-        centroid_y = detection.centroid[1]
+        mm_per_px = self._settings.preprocess.mm_per_pixel
+        cx_px, cy_px = detection.centroid
+        centroid_x, centroid_y = pixel_to_mm((cx_px, cy_px), mm_per_px)
         confidence = detection.confidence
         
         # Log da comunicação
@@ -695,7 +642,12 @@ class OperationPage(QWidget):
             return
         
         self._event_console.add_info("Parando sistema...")
-        
+
+        # Para stream MJPEG
+        if self._mjpeg_server:
+            self._mjpeg_server.stop()
+            self._mjpeg_server = None
+
         # Para componentes
         self._robot_controller.stop()
         self._inference_engine.stop()
@@ -746,7 +698,6 @@ class OperationPage(QWidget):
         self._pause_btn.setEnabled(self._is_running)
         self._stop_btn.setEnabled(self._is_running)
         self._source_combo.setEnabled(not self._is_running)
-        self._source_path_btn.setEnabled(True)  # Sempre habilitado
         
         # Controles de ciclo
         is_manual = not self._continuous_cb.isChecked()
@@ -765,117 +716,8 @@ class OperationPage(QWidget):
     
     def _on_source_changed(self, index: int) -> None:
         """Handler para mudança de fonte."""
-        # Mostra botão de seleção apenas para vídeo
-        self._source_path_btn.setVisible(index == 0)
         self._update_source_caption()
-    
-    def _select_video_file(self) -> None:
-        """Abre diálogo para selecionar vídeo."""
-        # Obtém diretório inicial (tenta usar o último caminho ou diretório padrão)
-        initial_dir = None
-        current_path = self._settings.streaming.video_path
-        if current_path:
-            current_path_obj = Path(current_path)
-            if current_path_obj.exists():
-                initial_dir = str(current_path_obj.parent)
-            elif current_path_obj.parent.exists():
-                initial_dir = str(current_path_obj.parent)
-        
-        if not initial_dir:
-            # Usa diretório padrão de vídeos
-            base_path = Path(__file__).parent.parent.parent
-            initial_dir = str(base_path / "videos")
-        
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Selecionar Vídeo",
-            initial_dir,
-            "Vídeos (*.mp4 *.avi *.mov *.mkv);;Todos os Arquivos (*)",
-        )
-        
-        if file_path:
-            file_path_obj = Path(file_path)
-            
-            # Validações
-            if not file_path_obj.exists():
-                self._event_console.add_error(
-                    f"Arquivo não encontrado: {file_path}\n"
-                    f"Por favor, verifique se o arquivo existe."
-                )
-                return
-            
-            if not file_path_obj.is_file():
-                self._event_console.add_error(
-                    f"O caminho especificado não é um arquivo: {file_path}"
-                )
-                return
-            
-            # Testa se OpenCV consegue abrir
-            import cv2
-            test_cap = cv2.VideoCapture(str(file_path_obj))
-            if not test_cap.isOpened():
-                test_cap.release()
-                self._event_console.add_error(
-                    f"Não foi possível abrir o arquivo de vídeo:\n"
-                    f"{file_path}\n\n"
-                    f"O arquivo pode estar corrompido ou em formato não suportado.\n"
-                    f"Formatos suportados: MP4, AVI, MOV, MKV"
-                )
-                return
-            test_cap.release()
-            
-            # Converte para caminho absoluto normalizado
-            abs_path = file_path_obj.resolve()
-            abs_path_str = str(abs_path)
-            
-            # Atualiza configuração
-            self._settings.streaming.video_path = abs_path_str
-            
-            # Log
-            self._logger.info("video_selected", path=abs_path_str)
-            self._event_console.add_info(f"Vídeo selecionado: {file_path_obj.name}")
-            
-            # Se o sistema está rodando, atualiza o stream sem parar a inferência
-            if self._is_running and self._stream_manager.is_running:
-                self._event_console.add_info("Atualizando stream para novo vídeo...")
-                
-                # Muda a fonte; change_source reinicia automaticamente se estava rodando
-                success = self._stream_manager.change_source(
-                    source_type="video",
-                    video_path=abs_path_str,
-                    loop_video=self._settings.streaming.loop_video,
-                )
-                
-                if success:
-                    # Atualiza o combo para refletir a nova fonte
-                    self._source_combo.blockSignals(True)
-                    self._source_combo.setCurrentIndex(0)  # "Arquivo de Vídeo"
-                    self._source_combo.blockSignals(False)
-                    self._source_path_btn.setVisible(True)
-                    
-                    self._event_console.add_success(f"Stream atualizado para: {file_path_obj.name}")
-                    self._logger.info("video_changed_during_runtime", path=abs_path_str)
-                else:
-                    # O stream falhou ao trocar — para o sistema inteiro para estado consistente
-                    self._event_console.add_error(
-                        f"Falha ao abrir vídeo: {file_path_obj.name}\n"
-                        f"O sistema será parado. Reinicie manualmente."
-                    )
-                    self._logger.error("video_change_failed_stopping_system", path=abs_path_str)
-                    self._stop_system()
-            else:
-                # Sistema não está rodando, apenas atualiza configuração em memória
-                self._stream_manager.change_source(
-                    source_type="video",
-                    video_path=abs_path_str,
-                    loop_video=self._settings.streaming.loop_video,
-                )
-                # Atualiza o combo para refletir a nova fonte
-                self._source_combo.blockSignals(True)
-                self._source_combo.setCurrentIndex(0)  # "Arquivo de Vídeo"
-                self._source_combo.blockSignals(False)
-                self._source_path_btn.setVisible(True)
-    
+
     def _toggle_fullscreen(self) -> None:
         """Alterna fullscreen do vídeo."""
         main_window = self.window()
@@ -918,6 +760,18 @@ class OperationPage(QWidget):
         """Handler para erro de stream."""
         self._event_console.add_error(f"Erro de stream: {error}", "Stream")
     
+    @Slot(np.ndarray)
+    def _on_frame_for_stream(self, frame) -> None:
+        """Atualiza provider do stream MJPEG com novo frame."""
+        if self._is_running:
+            self._stream_provider.update(frame, None)
+
+    @Slot(object)
+    def _on_detection_for_stream(self, result) -> None:
+        """Atualiza provider do stream MJPEG com detecções."""
+        if self._is_running and result:
+            self._stream_provider.update(None, result.detections)
+
     @Slot(object)
     def _on_frame_available(self, frame_info) -> None:
         """Handler para frame disponível - envia para inferência."""

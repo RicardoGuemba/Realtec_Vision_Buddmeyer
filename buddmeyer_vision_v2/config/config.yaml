@@ -2,17 +2,14 @@ log_level: INFO
 log_file: logs/buddmeyer_vision.log
 streaming:
   source_type: usb
-  video_path: C:/Vision_Buddmeyer_PySide/buddmeyer_vision_v2/videos/Colcha.mp4
-  usb_camera_index: 1
-  rtsp_url: ''
+  usb_camera_index: 0
   gige_ip: ''
   gige_port: 3956
   max_frame_buffer_size: 30
-  loop_video: true
 detection:
   model_path: C:/Vision_Buddmeyer_PySide/buddmeyer_vision_v2/models
   default_model: PekingU/rtdetr_r50vd
-  confidence_threshold: 0.8
+  confidence_threshold: 0.13
   max_detections: 10
   inference_fps: 15
   device: auto
@@ -20,6 +17,7 @@ preprocess:
   profile: default
   brightness: 0.0
   contrast: 0.0
+  mm_per_pixel: 10.0
 cip:
   ip: 187.99.124.229
   port: 44818
@@ -71,3 +69,6 @@ output:
   rtsp_enabled: false
   rtsp_port: 8554
   rtsp_path: /stream
+  stream_http_enabled: true
+  stream_http_port: 8765
+  stream_http_fps: 10

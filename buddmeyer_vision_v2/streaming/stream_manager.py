@@ -4,7 +4,6 @@ Gerenciador principal de streaming de vídeo.
 """
 
 import time
-from pathlib import Path
 from threading import Lock
 from typing import Optional, Dict, Any
 
@@ -227,71 +226,40 @@ class StreamManager(QObject):
     def change_source(
         self,
         source_type: str,
-        video_path: str = "",
         camera_index: int = 0,
-        rtsp_url: str = "",
         gige_ip: str = "",
         gige_port: int = 3956,
-        loop_video: bool = True,
         **kwargs
     ) -> bool:
         """
-        Muda a fonte de vídeo.
-        
-        Args:
-            source_type: Tipo de fonte
-            video_path: Caminho do vídeo
-            camera_index: Índice da câmera
-            rtsp_url: URL RTSP
-            gige_ip: IP GigE
-            gige_port: Porta GigE
-            loop_video: Loop do vídeo
-        
-        Returns:
-            True se mudou com sucesso
+        Muda a fonte de vídeo (USB ou GigE).
         """
         was_running = self._is_running
-        
-        # Para stream atual apenas se estava rodando
+
         if was_running:
-            # Para worker e fecha adaptador atual
             if self._worker is not None:
                 self._worker.stop()
-                self._worker.wait(5000)  # Aguarda thread terminar
+                self._worker.wait(5000)
                 self._worker.deleteLater()
                 self._worker = None
-            
+
             if self._adapter is not None:
                 self._adapter.close()
                 self._adapter = None
-            
+
             self._is_running = False
-        
-        # Usa as configurações atuais (NÃO recarrega do arquivo para não perder mudanças)
-        # self._settings = get_settings()  # Removido para preservar mudanças em memória
-        
-        # Atualiza configuração em memória
+
         settings = self._settings.streaming
         settings.source_type = source_type
-        
-        if video_path:
-            settings.video_path = video_path
+
         if camera_index >= 0:
             settings.usb_camera_index = camera_index
-        if rtsp_url:
-            settings.rtsp_url = rtsp_url
         if gige_ip:
             settings.gige_ip = gige_ip
         if gige_port > 0:
             settings.gige_port = gige_port
-        if loop_video is not None:
-            settings.loop_video = loop_video
-        
-        logger.info(
-            "source_changed",
-            source_type=source_type,
-            video_path=video_path if video_path else None,
-        )
+
+        logger.info("source_changed", source_type=source_type)
         
         # Reinicia se estava rodando
         if was_running:
@@ -324,57 +292,17 @@ class StreamManager(QObject):
         
         try:
             settings = self._settings.streaming
-            
-            # Log detalhado do que será usado — essencial para diagnóstico
+
             logger.info(
                 "stream_starting_with_settings",
                 source_type=settings.source_type,
-                video_path=settings.video_path if settings.source_type == "video" else None,
                 usb_camera_index=settings.usb_camera_index if settings.source_type == "usb" else None,
-                rtsp_url=settings.rtsp_url if settings.source_type == "rtsp" else None,
                 gige_ip=settings.gige_ip if settings.source_type == "gige" else None,
             )
-            
-            # Validações específicas por tipo de fonte
-            if settings.source_type == "video":
-                video_path_str = settings.video_path
-                video_path_obj = Path(video_path_str)
-                
-                # Tenta resolver caminho relativo
-                if not video_path_obj.is_absolute():
-                    base_path = Path(__file__).parent.parent
-                    video_path_obj = base_path / video_path_str
-                
-                # Normaliza caminho (resolve .., ./, etc)
-                try:
-                    video_path_obj = video_path_obj.resolve()
-                except Exception:
-                    pass
-                
-                if not video_path_obj.exists():
-                    error_msg = f"Arquivo de vídeo não encontrado: {video_path_obj}"
-                    logger.error("video_file_not_found", path=str(video_path_obj))
-                    self.stream_error.emit(error_msg)
-                    return False
-                
-                # Atualiza configuração com caminho normalizado
-                settings.video_path = str(video_path_obj)
-                logger.info("using_video_path", path=str(video_path_obj))
-            
-            elif settings.source_type == "usb":
-                logger.info(
-                    "using_usb_camera",
-                    camera_index=settings.usb_camera_index,
-                )
-            
-            elif settings.source_type == "rtsp":
-                if not settings.rtsp_url:
-                    error_msg = "URL RTSP não configurada"
-                    logger.error("rtsp_url_empty")
-                    self.stream_error.emit(error_msg)
-                    return False
-                logger.info("using_rtsp_stream", url=settings.rtsp_url)
-            
+
+            if settings.source_type == "usb":
+                logger.info("using_usb_camera", camera_index=settings.usb_camera_index)
+
             elif settings.source_type == "gige":
                 if not settings.gige_ip:
                     error_msg = "IP da câmera GigE não configurado"
@@ -387,15 +315,11 @@ class StreamManager(QObject):
                     port=settings.gige_port,
                 )
             
-            # Cria adaptador de acordo com o source_type
             self._adapter = create_adapter(
                 source_type=settings.source_type,
-                video_path=settings.video_path,
                 camera_index=settings.usb_camera_index,
-                rtsp_url=settings.rtsp_url,
                 gige_ip=settings.gige_ip,
                 gige_port=settings.gige_port,
-                loop_video=settings.loop_video,
             )
             
             # Abre fonte

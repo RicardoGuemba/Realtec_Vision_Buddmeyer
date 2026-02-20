@@ -90,9 +90,9 @@ O sistema executa o seguinte fluxo a cada detecção:
 
 ### Subaba: Pré-processamento
 
-- **Perfil:** default | bright | dark | high_contrast | low_contrast | enhanced | smooth | sharp (pré-definidos de brilho/contraste/realce).
+- **Calibração mm/px:** Valor (mm/pixel) para coordenadas do centroide. 1 = pixels. Outro valor = (u,v) exibidos e enviados ao CLP em mm.
 - **Brilho / Contraste:** Sliders (-100 a 100) para ajuste fino.
-- **ROI:** Ativar ROI e coordenadas X, Y, Largura (W), Altura (H) da região de interesse na imagem.
+- **ROI:** Ativar ROI e coordenadas X, Y, Largura (W), Altura (H) da região de interesse.
 
 ### Subaba: Controle (CLP)
 
@@ -106,9 +106,8 @@ O sistema executa o seguinte fluxo a cada detecção:
 
 ### Subaba: Output
 
-- **Habilitar servidor RTSP:** Ativa saída do stream via RTSP (para visualização externa).
-- **Porta RTSP:** Porta do servidor (ex.: 8554).
-- **Path RTSP:** Caminho do stream (ex.: /stream).
+- **Stream MJPEG (Supervisório Web):** Habilita stream em tempo real para visualização em navegador. O cliente abre `http://<IP>:porta/` ou `http://<IP>:porta/viewer`, informa a URL do stream (ex.: `http://192.168.1.10:8765/stream`) e clica em Conectar. Porta padrão: 8765. FPS configura o ritmo do stream (ex.: 10).
+- **Servidor RTSP:** (opcional) Habilitar servidor RTSP, porta 8554, path /stream.
 
 ### Ações na parte inferior
 

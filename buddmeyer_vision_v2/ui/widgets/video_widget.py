@@ -10,7 +10,9 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PySide6.QtCore import Qt, Signal, Slot, QTimer, QRect
 from PySide6.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont
 
+from config import get_settings
 from detection.events import Detection, DetectionResult
+from preprocessing.transforms import pixel_to_mm
 
 
 class VideoWidget(QWidget):
@@ -212,13 +214,15 @@ class VideoWidget(QWidget):
         painter.drawLine(cx - 8, cy, cx + 8, cy)
         painter.drawLine(cx, cy - 8, cx, cy + 8)
         
-        # Coordenadas do centroide (em pixels da imagem original)
-        centroid_x_original = (bbox.x1 + bbox.x2) / 2
-        centroid_y_original = (bbox.y1 + bbox.y2) / 2
-        
-        # Desenha label com coordenadas
+        # Coordenadas do centroide (em mm quando mm_per_pixel configurado)
+        centroid_x_px = (bbox.x1 + bbox.x2) / 2
+        centroid_y_px = (bbox.y1 + bbox.y2) / 2
+        mm_per_px = get_settings().preprocess.mm_per_pixel
+        cx_disp, cy_disp = pixel_to_mm((centroid_x_px, centroid_y_px), mm_per_px)
+        coord_label = f"({cx_disp:.2f}, {cy_disp:.2f})"
+
+        # Desenha label com coordenadas (em mm quando mm_per_pixel configurado)
         label = f"{best_detection.class_name} {best_detection.confidence:.0%}"
-        coord_label = f"({centroid_x_original:.0f}, {centroid_y_original:.0f})"
         
         font = QFont("Segoe UI", 10, QFont.Bold)
         painter.setFont(font)
@@ -232,7 +236,7 @@ class VideoWidget(QWidget):
         painter.drawText(label_rect, Qt.AlignCenter, label)
         
         # Background do label de coordenadas (abaixo do bbox)
-        coord_rect = QRect(cx - 50, y2 + 5, 100, 18)
+        coord_rect = QRect(cx - 60, y2 + 5, 120, 18)
         painter.fillRect(coord_rect, QColor(0, 0, 0, 180))
         
         # Texto das coordenadas

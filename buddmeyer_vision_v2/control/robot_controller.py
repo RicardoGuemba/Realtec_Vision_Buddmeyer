@@ -17,6 +17,7 @@ from core.metrics import MetricsCollector
 from core.exceptions import RobotControlError, StateTransitionError
 from communication import CIPClient
 from detection.events import DetectionEvent
+from preprocessing.transforms import pixel_to_mm
 
 logger = get_logger("control.robot")
 
@@ -303,15 +304,17 @@ class RobotController(QObject):
         self._current_detection = event
         
         if event.detected:
+            mm_per_px = get_settings().preprocess.mm_per_pixel
+            cx, cy = pixel_to_mm(event.centroid, mm_per_px)
             logger.info(
                 "detection_received",
                 class_name=event.class_name,
                 confidence=event.confidence,
-                centroid=event.centroid,
+                centroid=(cx, cy),
             )
             self._record_step(
                 f"Embalagem detectada: {event.class_name} "
-                f"({event.confidence:.0%}) em ({event.centroid[0]:.0f}, {event.centroid[1]:.0f})"
+                f"({event.confidence:.0%}) em ({cx:.2f}, {cy:.2f})"
             )
             if self._cycle_mode == "manual":
                 self._transition_to(RobotControlState.WAITING_SEND_AUTHORIZATION)
@@ -453,11 +456,15 @@ class RobotController(QObject):
                 return
             
             plc_data = self._current_detection.to_plc_data()
+            mm_per_px = get_settings().preprocess.mm_per_pixel
+            centroid_x, centroid_y = pixel_to_mm(
+                (plc_data["centroid_x"], plc_data["centroid_y"]), mm_per_px
+            )
             
             await self._cip_client.write_detection_result(
                 detected=plc_data["product_detected"],
-                centroid_x=plc_data["centroid_x"],
-                centroid_y=plc_data["centroid_y"],
+                centroid_x=centroid_x,
+                centroid_y=centroid_y,
                 confidence=plc_data["confidence"],
                 detection_count=plc_data["detection_count"],
                 processing_time=plc_data["processing_time"],
@@ -465,7 +472,7 @@ class RobotController(QObject):
             
             self._record_step(
                 f"Coordenadas enviadas ao CLP: "
-                f"({plc_data['centroid_x']:.0f}, {plc_data['centroid_y']:.0f}) "
+                f"({centroid_x:.2f}, {centroid_y:.2f}) "
                 f"conf={plc_data['confidence']:.0%}"
             )
             self.detection_sent.emit(self._current_detection)

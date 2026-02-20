@@ -23,7 +23,7 @@ Sistema desktop Windows para **automação de expedição (pick-and-place)** de 
 - **Visão**: detecção em tempo real com modelos DETR/RT-DETR (Hugging Face).
 - **Comunicação industrial**: CLP Omron NX102 via CIP/EtherNet-IP (biblioteca aphyt).
 - **Interface**: PySide6 com 3 abas (Operação, Configuração, Diagnósticos).
-- **Fontes de vídeo**: arquivo (MP4/AVI/MOV), USB, RTSP, GigE.
+- **Fontes de vídeo**: câmera USB ou câmera GigE (somente câmeras reais).
 - **Modo simulado**: desenvolvimento e testes sem CLP real.
 
 ### 1.2 Fluxo de dados resumido
@@ -72,7 +72,7 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 | Feature | Arquivo | Descrição |
 |---------|---------|-----------|
 | Gerenciador | `streaming/stream_manager.py` | `StreamManager` (singleton): cria adaptador via `create_adapter()`, `FrameBuffer`, `StreamWorker` (QThread). Sinais: `frame_info_available`, `stream_started`, `stream_stopped`, `stream_error`. Métodos: `start()`, `stop()`, `pause()`, `resume()`, `change_source()`, `get_fps()`, `get_status()`. |
-| Adaptadores | `streaming/source_adapters.py` | `SourceType` (VIDEO, USB, RTSP, GIGE); `BaseSourceAdapter` (open/read/close); `VideoFileAdapter`, `USBCameraAdapter`, `RTSPAdapter`, `GigECameraAdapter`; factory `create_adapter(settings)`. |
+| Adaptadores | `streaming/source_adapters.py` | `SourceType` (USB, GIGE); `BaseSourceAdapter` (open/read/close); `USBCameraAdapter`, `GigECameraAdapter`; factory `create_adapter(settings)`. |
 | Buffer | `streaming/frame_buffer.py` | `FrameBuffer` thread-safe com `FrameInfo` (frame, frame_id, timestamp). |
 | Saúde | `streaming/stream_health.py` | `StreamHealth` / `HealthStatus` para monitoramento do stream. |
 
@@ -149,7 +149,7 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 **Arquivo:** `ui/pages/configuration_page.py` — `ConfigurationPage`:
 
 - **Sub-abas:** Fonte de Vídeo, Modelo RT-DETR, Pré-processamento, Controle (CLP), Output.
-- **Fonte:** tipo, caminho do vídeo, índice USB, URL RTSP, IP/porta GigE, loop.
+- **Fonte:** tipo (USB ou GigE), índice USB, IP/porta GigE.
 - **Modelo:** caminho, device (CPU/CUDA/Auto), threshold de confiança, max detecções.
 - **Pré-processamento:** perfil, brilho, contraste, ROI.
 - **CLP:** IP, porta, timeout, modo simulado, “Testar Conexão”.
@@ -170,8 +170,7 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 
 | Widget            | Arquivo                     | Função principal                                      |
 |-------------------|-----------------------------|-------------------------------------------------------|
-| VideoWidget       | `ui/widgets/video_widget.py` | Exibe frame, overlay de bbox/centroide, FPS           |
-| DetectionOverlay  | `ui/widgets/detection_overlay.py` | Desenho de bboxes e labels sobre o frame         |
+| VideoWidget       | `ui/widgets/video_widget.py` | Exibe frame, overlay de bbox/centroide, FPS, coordenadas em mm |
 | StatusPanel       | `ui/widgets/status_panel.py` | Status sistema/CLP, última detecção, contadores   |
 | EventConsole      | `ui/widgets/event_console.py` | Lista de eventos em tempo real                    |
 | MetricsChart      | `ui/widgets/metrics_chart.py` | Gráficos de métricas                              |
@@ -202,8 +201,7 @@ buddmeyer_vision_v2/
 ├── preprocessing/
 │   ├── preprocess_pipeline.py
 │   ├── roi_manager.py
-│   ├── transforms.py
-│   └── preprocess_config.py
+│   └── transforms.py
 ├── detection/
 │   ├── inference_engine.py # Singleton + InferenceWorker (QThread)
 │   ├── model_loader.py
@@ -256,7 +254,7 @@ buddmeyer_vision_v2/
 
 - **Onde:** `config/config.yaml` (seção `streaming`) e/ou aba Configuração → Fonte de Vídeo.
 - **Código:** `config/settings.py` (`StreamingSettings`), `streaming/stream_manager.py` (`change_source()`), `streaming/source_adapters.py` (adaptadores e `create_adapter()`).
-- **Manutenção:** ao adicionar novo tipo de fonte, criar novo adapter em `source_adapters.py`, registrar em `SourceType` e em `create_adapter()`; opcionalmente novo item no combo na Operation page.
+- **Fontes suportadas:** USB e GigE (câmeras reais apenas). Para adicionar novo tipo, criar adapter em `source_adapters.py`, registrar em `SourceType` e em `create_adapter()`.
 
 ### 5.2 Trocar modelo ou threshold de detecção
 
@@ -280,7 +278,7 @@ buddmeyer_vision_v2/
 ### 5.5 Pré-processamento (ROI, brilho, contraste, perfis)
 
 - **Onde:** `config/config.yaml` (`preprocess`) e aba Configuração → Pré-processamento.
-- **Código:** `preprocessing/preprocess_pipeline.py`, `preprocessing/roi_manager.py`, `preprocessing/transforms.py`, `preprocessing/preprocess_config.py`.
+- **Código:** `preprocessing/preprocess_pipeline.py`, `preprocessing/roi_manager.py`, `preprocessing/transforms.py`.
 - **Manutenção:** novos perfis em `PREPROCESS_PROFILES`; ajustes de ROI no pipeline; parâmetros de brilho/contraste nos transforms.
 
 ### 5.6 Logs e diagnósticos

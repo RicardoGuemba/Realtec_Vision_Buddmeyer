@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QGroupBox, QFormLayout, QLineEdit, QSpinBox,
     QDoubleSpinBox, QComboBox, QCheckBox, QPushButton,
-    QLabel, QFileDialog, QSlider, QFrame, QMessageBox
+    QLabel, QFileDialog, QSlider, QFrame, QMessageBox,
 )
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
@@ -111,93 +111,49 @@ class ConfigurationPage(QWidget):
         layout.addLayout(buttons_layout)
     
     def _create_video_tab(self) -> QWidget:
-        """Cria aba de configuração de vídeo."""
+        """Cria aba de configuração de fonte (USB e GigE)."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(16)
-        
+
         # Tipo de fonte
         source_group = QGroupBox("Tipo de Fonte")
         source_layout = QFormLayout(source_group)
-        
         self._source_type = QComboBox()
-        self._source_type.addItems([
-            "Arquivo de Vídeo",
-            "Câmera USB",
-            "Stream RTSP",
-            "Câmera GigE",
-        ])
+        self._source_type.addItems(["Câmera USB", "Câmera GigE"])
         self._source_type.currentIndexChanged.connect(self._on_source_type_changed)
         source_layout.addRow("Tipo:", self._source_type)
-        
         layout.addWidget(source_group)
-        
-        # Arquivo de vídeo
-        self._video_group = QGroupBox("Arquivo de Vídeo")
-        video_layout = QFormLayout(self._video_group)
-        
-        path_layout = QHBoxLayout()
-        self._video_path = QLineEdit()
-        self._video_path.setReadOnly(True)
-        path_layout.addWidget(self._video_path)
-        
-        browse_btn = QPushButton("Procurar...")
-        browse_btn.clicked.connect(self._browse_video)
-        path_layout.addWidget(browse_btn)
-        video_layout.addRow("Caminho:", path_layout)
-        
-        self._loop_video = QCheckBox("Loop do vídeo")
-        video_layout.addRow("", self._loop_video)
-        
-        layout.addWidget(self._video_group)
-        
+
         # Câmera USB
         self._usb_group = QGroupBox("Câmera USB")
         usb_layout = QFormLayout(self._usb_group)
-        
         self._usb_index = QSpinBox()
         self._usb_index.setRange(0, 10)
         usb_layout.addRow("Índice:", self._usb_index)
-        
         layout.addWidget(self._usb_group)
-        
-        # RTSP
-        self._rtsp_group = QGroupBox("Stream RTSP")
-        rtsp_layout = QFormLayout(self._rtsp_group)
-        
-        self._rtsp_url = QLineEdit()
-        self._rtsp_url.setPlaceholderText("rtsp://...")
-        rtsp_layout.addRow("URL:", self._rtsp_url)
-        
-        layout.addWidget(self._rtsp_group)
-        
+
         # GigE
         self._gige_group = QGroupBox("Câmera GigE")
         gige_layout = QFormLayout(self._gige_group)
-        
         self._gige_ip = QLineEdit()
         self._gige_ip.setPlaceholderText("192.168.1.100")
         gige_layout.addRow("IP:", self._gige_ip)
-        
         self._gige_port = QSpinBox()
         self._gige_port.setRange(1, 65535)
         self._gige_port.setValue(3956)
         gige_layout.addRow("Porta:", self._gige_port)
-        
         layout.addWidget(self._gige_group)
-        
+
         # Buffer
         buffer_group = QGroupBox("Buffer")
         buffer_layout = QFormLayout(buffer_group)
-        
         self._buffer_size = QSpinBox()
         self._buffer_size.setRange(1, 100)
         buffer_layout.addRow("Tamanho máximo:", self._buffer_size)
-        
         layout.addWidget(buffer_group)
-        
+
         layout.addStretch()
-        
         return widget
     
     def _create_model_tab(self) -> QWidget:
@@ -277,19 +233,22 @@ class ConfigurationPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setSpacing(16)
         
-        # Perfil
-        profile_group = QGroupBox("Perfil")
-        profile_layout = QFormLayout(profile_group)
-        
-        self._profile_combo = QComboBox()
-        self._profile_combo.addItems([
-            "default", "bright", "dark",
-            "high_contrast", "low_contrast",
-            "enhanced", "smooth", "sharp",
-        ])
-        profile_layout.addRow("Perfil:", self._profile_combo)
-        
-        layout.addWidget(profile_group)
+        # mm/px — campo principal de calibração (topo da aba)
+        mm_group = QGroupBox("Calibração mm/px — Coordenadas (u,v) do centroide em mm")
+        mm_layout = QHBoxLayout(mm_group)
+        mm_layout.addWidget(QLabel("Valor (mm/pixel):"))
+        self._mm_per_pixel = QDoubleSpinBox()
+        self._mm_per_pixel.setRange(0.001, 1000.0)
+        self._mm_per_pixel.setDecimals(3)
+        self._mm_per_pixel.setSingleStep(0.01)
+        self._mm_per_pixel.setSuffix(" mm/px")
+        self._mm_per_pixel.setMinimumWidth(130)
+        self._mm_per_pixel.setToolTip(
+            "Relação mm por pixel. 1 = pixels. Outro valor = centroide em mm na tela e no CLP."
+        )
+        mm_layout.addWidget(self._mm_per_pixel)
+        mm_layout.addStretch()
+        layout.addWidget(mm_group)
         
         # Ajustes
         adjust_group = QGroupBox("Ajustes de Imagem")
@@ -429,24 +388,41 @@ class ConfigurationPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setSpacing(16)
         
+        # Stream MJPEG (web)
+        mjpeg_group = QGroupBox("Stream MJPEG (Supervisório Web)")
+        mjpeg_layout = QFormLayout(mjpeg_group)
+        mjpeg_group.setToolTip(
+            "Stream em tempo real para visualização em navegador. "
+            "Cliente abre http://<IP>:porta/ ou http://<IP>:porta/viewer e informa a URL do stream."
+        )
+        self._stream_http_enabled = QCheckBox("Habilitar stream MJPEG para web")
+        self._stream_http_enabled.setChecked(True)
+        mjpeg_layout.addRow("", self._stream_http_enabled)
+        self._stream_http_port = QSpinBox()
+        self._stream_http_port.setRange(1024, 65535)
+        self._stream_http_port.setValue(8765)
+        self._stream_http_port.setToolTip("URL: http://<IP>:8765/stream")
+        mjpeg_layout.addRow("Porta:", self._stream_http_port)
+        self._stream_http_fps = QSpinBox()
+        self._stream_http_fps.setRange(1, 30)
+        self._stream_http_fps.setValue(10)
+        mjpeg_layout.addRow("FPS:", self._stream_http_fps)
+        layout.addWidget(mjpeg_group)
+
         # RTSP Server
         rtsp_group = QGroupBox("Servidor RTSP")
         rtsp_layout = QFormLayout(rtsp_group)
-        
         self._rtsp_enabled = QCheckBox("Habilitar servidor RTSP")
         rtsp_layout.addRow("", self._rtsp_enabled)
-        
         self._rtsp_port = QSpinBox()
         self._rtsp_port.setRange(1, 65535)
         self._rtsp_port.setValue(8554)
         rtsp_layout.addRow("Porta:", self._rtsp_port)
-        
         self._rtsp_path = QLineEdit()
         self._rtsp_path.setText("/stream")
         rtsp_layout.addRow("Path:", self._rtsp_path)
-        
         layout.addWidget(rtsp_group)
-        
+
         layout.addStretch()
         
         return widget
@@ -454,14 +430,10 @@ class ConfigurationPage(QWidget):
     def _load_settings(self) -> None:
         """Carrega configurações atuais."""
         s = self._settings
-        
-        # Vídeo
-        source_map = {"video": 0, "usb": 1, "rtsp": 2, "gige": 3}
+
+        source_map = {"usb": 0, "gige": 1}
         self._source_type.setCurrentIndex(source_map.get(s.streaming.source_type, 0))
-        self._video_path.setText(s.streaming.video_path)
-        self._loop_video.setChecked(s.streaming.loop_video)
         self._usb_index.setValue(s.streaming.usb_camera_index)
-        self._rtsp_url.setText(s.streaming.rtsp_url)
         self._gige_ip.setText(s.streaming.gige_ip)
         self._gige_port.setValue(s.streaming.gige_port)
         self._buffer_size.setValue(s.streaming.max_frame_buffer_size)
@@ -475,9 +447,9 @@ class ConfigurationPage(QWidget):
         self._inference_fps.setValue(s.detection.inference_fps)
         
         # Pré-processamento
-        self._profile_combo.setCurrentText(s.preprocess.profile)
         self._brightness_slider.setValue(int(s.preprocess.brightness * 100))
         self._contrast_slider.setValue(int(s.preprocess.contrast * 100))
+        self._mm_per_pixel.setValue(s.preprocess.mm_per_pixel)
         
         # ROI
         if s.preprocess.roi and len(s.preprocess.roi) == 4:
@@ -503,23 +475,22 @@ class ConfigurationPage(QWidget):
         self._heartbeat_interval.setValue(s.cip.heartbeat_interval)
         
         # Output
+        self._stream_http_enabled.setChecked(s.output.stream_http_enabled)
+        self._stream_http_port.setValue(s.output.stream_http_port)
+        self._stream_http_fps.setValue(s.output.stream_http_fps)
         self._rtsp_enabled.setChecked(s.output.rtsp_enabled)
         self._rtsp_port.setValue(s.output.rtsp_port)
         self._rtsp_path.setText(s.output.rtsp_path)
-        
+
         self._on_source_type_changed(self._source_type.currentIndex())
     
     def _save_settings(self) -> None:
         """Salva configurações."""
         s = self._settings
-        
-        # Vídeo
-        source_types = ["video", "usb", "rtsp", "gige"]
+
+        source_types = ["usb", "gige"]
         s.streaming.source_type = source_types[self._source_type.currentIndex()]
-        s.streaming.video_path = self._video_path.text()
-        s.streaming.loop_video = self._loop_video.isChecked()
         s.streaming.usb_camera_index = self._usb_index.value()
-        s.streaming.rtsp_url = self._rtsp_url.text()
         s.streaming.gige_ip = self._gige_ip.text()
         s.streaming.gige_port = self._gige_port.value()
         s.streaming.max_frame_buffer_size = self._buffer_size.value()
@@ -533,9 +504,10 @@ class ConfigurationPage(QWidget):
         s.detection.inference_fps = self._inference_fps.value()
         
         # Pré-processamento
-        s.preprocess.profile = self._profile_combo.currentText()
+        s.preprocess.profile = "default"  # Perfil removido da UI, mantido para compatibilidade
         s.preprocess.brightness = self._brightness_slider.value() / 100
         s.preprocess.contrast = self._contrast_slider.value() / 100
+        s.preprocess.mm_per_pixel = self._mm_per_pixel.value()
         
         # ROI
         if self._roi_enabled.isChecked():
@@ -558,6 +530,9 @@ class ConfigurationPage(QWidget):
         s.cip.heartbeat_interval = self._heartbeat_interval.value()
         
         # Output
+        s.output.stream_http_enabled = self._stream_http_enabled.isChecked()
+        s.output.stream_http_port = self._stream_http_port.value()
+        s.output.stream_http_fps = self._stream_http_fps.value()
         s.output.rtsp_enabled = self._rtsp_enabled.isChecked()
         s.output.rtsp_port = self._rtsp_port.value()
         s.output.rtsp_path = self._rtsp_path.text()
@@ -611,17 +586,6 @@ class ConfigurationPage(QWidget):
             "Clique em 'Salvar Configurações' para persistir no arquivo."
         )
     
-    def _browse_video(self) -> None:
-        """Abre diálogo para selecionar vídeo."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Selecionar Vídeo",
-            "",
-            "Vídeos (*.mp4 *.avi *.mov *.mkv);;Todos (*)",
-        )
-        if file_path:
-            self._video_path.setText(file_path)
-    
     def _browse_model(self) -> None:
         """Abre diálogo para selecionar modelo."""
         dir_path = QFileDialog.getExistingDirectory(
@@ -633,10 +597,8 @@ class ConfigurationPage(QWidget):
     
     def _on_source_type_changed(self, index: int) -> None:
         """Handler para mudança de tipo de fonte."""
-        self._video_group.setVisible(index == 0)
-        self._usb_group.setVisible(index == 1)
-        self._rtsp_group.setVisible(index == 2)
-        self._gige_group.setVisible(index == 3)
+        self._usb_group.setVisible(index == 0)
+        self._gige_group.setVisible(index == 1)
     
     def _on_confidence_changed(self, value: int) -> None:
         """Handler para mudança de confiança."""
