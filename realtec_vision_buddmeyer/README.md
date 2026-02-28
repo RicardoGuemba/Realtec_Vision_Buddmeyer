@@ -68,6 +68,7 @@ python realtec_vision_buddmeyer/main.py
 
 ## 📖 Documentação
 
+- **[docs/DOCUMENTACAO_AVALIACAO_CLIENTE_TI.md](docs/DOCUMENTACAO_AVALIACAO_CLIENTE_TI.md)** – **documento principal para avaliação** (cliente e TI): linguagem alto/baixo nível, casos de uso, UI, features, esquemas gráficos, tutorial instalação (clone GitHub) e uso.
 - **[docs/DOCUMENTACAO_SISTEMA_COMPLETA.md](docs/DOCUMENTACAO_SISTEMA_COMPLETA.md)** – documentação técnica completa: visão alto/baixo nível, features por código, diagramas, variáveis e guia de manutenção.
 - **[docs/DOCUMENTACAO_PARA_CLIENTE.md](docs/DOCUMENTACAO_PARA_CLIENTE.md)** – documentação para compartilhamento com o cliente.
 

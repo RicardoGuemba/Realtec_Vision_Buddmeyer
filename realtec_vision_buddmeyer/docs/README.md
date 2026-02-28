@@ -4,6 +4,7 @@
 
 | Documento | Público | Conteúdo |
 |-----------|---------|----------|
+| **[DOCUMENTACAO_AVALIACAO_CLIENTE_TI.md](DOCUMENTACAO_AVALIACAO_CLIENTE_TI.md)** | Cliente e TI | **Documento principal para avaliação:** linguagem alto/baixo nível, casos de uso, UI, features, esquemas gráficos, tutorial instalação (clone GitHub) e uso |
 | **[DOCUMENTACAO_SISTEMA_COMPLETA.md](DOCUMENTACAO_SISTEMA_COMPLETA.md)** | Equipe técnica | Visão alto/baixo nível, features por código, diagramas, variáveis, guia de manutenção |
 | **[DOCUMENTACAO_PARA_CLIENTE.md](DOCUMENTACAO_PARA_CLIENTE.md)** | Cliente | Documento técnico-funcional para compartilhamento |
 | **[USO_E_ABAS.md](USO_E_ABAS.md)** | Operador | Guia de uso das abas Operação, Configuração e Diagnósticos |
