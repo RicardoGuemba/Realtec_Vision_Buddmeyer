@@ -40,6 +40,11 @@ class ConfigurationPage(QWidget):
         self._setup_ui()
         self._load_settings()
     
+    def showEvent(self, event):
+        """Recarrega do settings ao exibir (ex.: mm/px alterado na aba Operação)."""
+        super().showEvent(event)
+        self._load_settings()
+    
     def _setup_ui(self) -> None:
         """Configura a interface."""
         layout = QVBoxLayout(self)
@@ -79,6 +84,9 @@ class ConfigurationPage(QWidget):
         
         # Aba CLP
         self._tabs.addTab(self._create_plc_tab(), "Controle (CLP)")
+        
+        # Aba Sistema
+        self._tabs.addTab(self._create_system_tab(), "Sistema")
         
         # Aba Output
         self._tabs.addTab(self._create_output_tab(), "Output")
@@ -383,6 +391,33 @@ class ConfigurationPage(QWidget):
         
         return widget
     
+    def _create_system_tab(self) -> QWidget:
+        """Cria aba de configuração do sistema (auto-início, etc.)."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(16)
+        
+        # Auto-início
+        startup_group = QGroupBox("Inicialização Automática")
+        startup_group.setToolTip(
+            "Quando habilitado, o sistema inicia automaticamente após o login no Windows.\n"
+            "Útil para restabelecer operação após falta de energia ou reinício do PC."
+        )
+        startup_layout = QFormLayout(startup_group)
+        
+        self._auto_start = QCheckBox("Iniciar automaticamente com o Windows")
+        self._auto_start.setToolTip(
+            "Adiciona o sistema à pasta Inicialização do Windows. "
+            "O aplicativo será iniciado após o usuário fazer login."
+        )
+        startup_layout.addRow("", self._auto_start)
+        
+        layout.addWidget(startup_group)
+        
+        layout.addStretch()
+        
+        return widget
+    
     def _create_output_tab(self) -> QWidget:
         """Cria aba de configuração de output."""
         widget = QWidget()
@@ -506,6 +541,9 @@ class ConfigurationPage(QWidget):
         self._max_retries.setValue(s.cip.max_retries)
         self._heartbeat_interval.setValue(s.cip.heartbeat_interval)
         
+        # Sistema
+        self._auto_start.setChecked(getattr(s.system, "auto_start", False))
+
         # Output
         self._stream_http_enabled.setChecked(s.output.stream_http_enabled)
         self._stream_http_port.setValue(s.output.stream_http_port)
@@ -559,6 +597,9 @@ class ConfigurationPage(QWidget):
         s.cip.max_retries = self._max_retries.value()
         s.cip.heartbeat_interval = self._heartbeat_interval.value()
         
+        # Sistema (auto-início)
+        s.system.auto_start = self._auto_start.isChecked()
+        
         # Output
         s.output.stream_http_enabled = self._stream_http_enabled.isChecked()
         s.output.stream_http_port = self._stream_http_port.value()
@@ -568,6 +609,17 @@ class ConfigurationPage(QWidget):
         config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
         s.to_yaml(config_path)
         
+        # Aplica auto-início no Windows (pasta Inicialização)
+        try:
+            from core.windows_startup import set_auto_start, is_windows
+            if is_windows():
+                if set_auto_start(s.system.auto_start):
+                    logger.info("auto_start_updated", enabled=s.system.auto_start)
+                else:
+                    logger.warning("auto_start_update_failed")
+        except Exception as e:
+            logger.warning("auto_start_error", error=str(e))
+        
         logger.info(
             "config_saved",
             cip_ip=s.cip.ip,
@@ -575,7 +627,12 @@ class ConfigurationPage(QWidget):
             config_path=str(config_path),
         )
         
-        QMessageBox.information(self, "Sucesso", "Configurações salvas com sucesso!")
+        # Feedback não bloqueante (evita instabilidade ao salvar durante operação)
+        main_win = self.window()
+        if main_win and hasattr(main_win, "statusBar") and main_win.statusBar():
+            main_win.statusBar().showMessage("Configurações salvas com sucesso!", 3000)
+        else:
+            QMessageBox.information(self, "Sucesso", "Configurações salvas com sucesso!")
     
     def _reset_settings(self) -> None:
         """Restaura configurações padrão carregando valores default do Pydantic."""
@@ -592,7 +649,7 @@ class ConfigurationPage(QWidget):
         
         from config.settings import (
             StreamingSettings, DetectionSettings, PreprocessSettings,
-            CIPSettings, OutputSettings,
+            CIPSettings, SystemSettings, OutputSettings,
         )
         
         # Aplica defaults no objeto settings em memória
@@ -601,6 +658,7 @@ class ConfigurationPage(QWidget):
         s.detection = DetectionSettings()
         s.preprocess = PreprocessSettings()
         s.cip = CIPSettings()
+        s.system = SystemSettings()
         s.output = OutputSettings()
         
         # Recarrega a UI com os novos valores

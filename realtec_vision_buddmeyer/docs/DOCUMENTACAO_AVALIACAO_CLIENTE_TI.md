@@ -153,6 +153,7 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 | **Modelo RT-DETR** | Modelo, caminho local, device, confiança mínima, máximo de detecções, FPS de inferência |
 | **Pré-processamento** | Calibração mm/px, brilho, contraste, ROI |
 | **Controle (CLP)** | IP, porta, timeout, modo simulado, testar conexão, reconexão, heartbeat |
+| **Sistema** | Iniciar automaticamente com o Windows (restabelece após falta de energia) |
 | **Output** | Stream MJPEG (habilitar, porta, FPS), **URL (acesso web)** com botão Copiar |
 
 ## 3.4 Aba Diagnósticos
@@ -202,6 +203,13 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 3. Salvar configurações.  
 4. As coordenadas passam a ser exibidas e enviadas ao CLP em mm.
 
+### UC-06: Habilitar auto-início (restabelecer após falta de energia)
+
+1. Aba Configuração → Sistema.  
+2. Marcar **"Iniciar automaticamente com o Windows"**.  
+3. Salvar configurações.  
+4. Após reinício do PC (ex.: falta de energia), o sistema inicia automaticamente quando o usuário fizer login.
+
 ---
 
 # 4. Features, funções e variáveis
@@ -216,6 +224,7 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 | **Comunicação CLP** | IP, porta, timeouts, TAGs, modo simulado | Config → Controle (CLP) |
 | **Ciclo pick-and-place** | Modo manual ou contínuo; timeouts de ACK/Pick/Place | Config → Controle (CLP) |
 | **Stream web (MJPEG)** | Visualização remota com overlay de detecções | Config → Output |
+| **Auto-início** | Inicia automaticamente com o Windows após login (restabelece após falta de energia) | Config → Sistema |
 | **Interface** | Três abas: Operação, Configuração, Diagnósticos | — |
 
 ## 4.2 Variáveis por feature
@@ -563,7 +572,14 @@ git pull origin gige-operando-com-setup
 3. Salve as configurações.  
 4. As coordenadas passam a ser exibidas e enviadas ao CLP em milímetros.
 
-## 7.7 Atalhos de teclado
+## 7.7 Auto-início (restabelecer após falta de energia)
+
+1. Aba **Configuração → Sistema**.  
+2. Marque **"Iniciar automaticamente com o Windows"**.  
+3. Salve as configurações.  
+4. O sistema será adicionado à pasta Inicialização do Windows. Após reinício do PC (ex.: falta de energia), o aplicativo inicia automaticamente quando o usuário fizer login.
+
+## 7.8 Atalhos de teclado
 
 | Atalho | Ação |
 |--------|------|
@@ -573,7 +589,7 @@ git pull origin gige-operando-com-setup
 | Ctrl+S | Salvar configurações |
 | Ctrl+Q | Sair |
 
-## 7.8 Troubleshooting rápido
+## 7.9 Troubleshooting rápido
 
 | Problema | Solução |
 |----------|---------|

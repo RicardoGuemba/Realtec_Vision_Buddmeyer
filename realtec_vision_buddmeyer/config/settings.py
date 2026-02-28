@@ -136,6 +136,15 @@ class TagSettings(BaseModel):
     SafetyEmergencyStop: str = Field(default="Safety_EmergencyStop")
 
 
+class SystemSettings(BaseModel):
+    """Configurações do sistema (auto-início, etc.)."""
+
+    auto_start: bool = Field(
+        default=False,
+        description="Iniciar automaticamente com o Windows (após login)",
+    )
+
+
 class OutputSettings(BaseModel):
     """Configurações de saída (stream MJPEG web)."""
 
@@ -178,6 +187,7 @@ class Settings(BaseSettings):
     cip: CIPSettings = Field(default_factory=CIPSettings)
     robot_control: RobotControlSettings = Field(default_factory=RobotControlSettings)
     tags: TagSettings = Field(default_factory=TagSettings)
+    system: SystemSettings = Field(default_factory=SystemSettings)
     output: OutputSettings = Field(default_factory=OutputSettings)
     
     @classmethod

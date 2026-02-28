@@ -385,6 +385,7 @@ Esta seção serve de referência para suporte e evolução do sistema (equipe t
 - **Modelo RT-DETR:** Modelo, caminho local, device, confiança mínima, máximo de detecções, FPS de inferência  
 - **Pré-processamento:** Calibração mm/px, brilho, contraste, ROI  
 - **Controle (CLP):** IP, porta, timeout, modo simulado, testar conexão, reconexão, heartbeat  
+- **Sistema:** Iniciar automaticamente com o Windows (restabelece após falta de energia)  
 - **Output:** Stream MJPEG (habilitar, porta, FPS)  
 - **Ações:** Restaurar padrões, Salvar configurações  
 
@@ -434,6 +435,13 @@ Esta seção serve de referência para suporte e evolução do sistema (equipe t
 2. Preencher o campo “Calibração mm/px” (ex.: 0,25).  
 3. Salvar configurações.  
 4. As coordenadas passam a ser exibidas e enviadas ao CLP em mm.  
+
+## UC-06: Habilitar auto-início (restabelecer após falta de energia)
+
+1. Aba Configuração → Sistema.  
+2. Marcar **"Iniciar automaticamente com o Windows"**.  
+3. Salvar configurações.  
+4. Após reinício do PC (ex.: falta de energia), o sistema inicia automaticamente quando o usuário fizer login.  
 
 ---
 

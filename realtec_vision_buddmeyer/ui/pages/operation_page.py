@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QPushButton, QComboBox, QLabel,
+    QPushButton, QComboBox, QLabel, QDoubleSpinBox,
     QSplitter, QGroupBox, QCheckBox
 )
 from PySide6.QtCore import Qt, Slot, QTimer
@@ -240,6 +240,27 @@ class OperationPage(QWidget):
         sep.setStyleSheet("background-color: #3d4852;")
         controls_layout.addWidget(sep)
         
+        # Calibração mm/px em operação (efeito imediato, sem reiniciar)
+        controls_layout.addWidget(QLabel("mm/px:"))
+        self._mm_per_pixel_op = QDoubleSpinBox()
+        self._mm_per_pixel_op.setRange(0.001, 1000.0)
+        self._mm_per_pixel_op.setDecimals(3)
+        self._mm_per_pixel_op.setSingleStep(0.01)
+        self._mm_per_pixel_op.setSuffix(" mm/px")
+        self._mm_per_pixel_op.setMinimumWidth(100)
+        self._mm_per_pixel_op.setToolTip(
+            "Calibração: 1 = pixels. Outro valor = coordenadas em mm. Efeito imediato."
+        )
+        self._mm_per_pixel_op.setValue(self._settings.preprocess.mm_per_pixel)
+        self._mm_per_pixel_op.valueChanged.connect(self._on_mm_per_pixel_changed)
+        controls_layout.addWidget(self._mm_per_pixel_op)
+        
+        # Separador visual
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.VLine)
+        sep2.setStyleSheet("background-color: #3d4852;")
+        controls_layout.addWidget(sep2)
+        
         # Autorizar envio ao CLP (modo manual, apos deteccao)
         self._authorize_send_btn = QPushButton("Autorizar envio ao CLP")
         self._authorize_send_btn.setMinimumWidth(140)
@@ -299,11 +320,19 @@ class OperationPage(QWidget):
         layout.addWidget(controls_frame)
     
     def _sync_combo_to_settings(self) -> None:
-        """Sincroniza o combo de fonte com o source_type do settings."""
+        """Sincroniza o combo de fonte e mm/px com o settings."""
         source_type_map = {"usb": 0, "gige": 1}
         combo_index = source_type_map.get(self._settings.streaming.source_type, 0)
         self._source_combo.setCurrentIndex(combo_index)
         self._update_source_caption()
+        if hasattr(self, "_mm_per_pixel_op"):
+            self._mm_per_pixel_op.blockSignals(True)
+            self._mm_per_pixel_op.setValue(self._settings.preprocess.mm_per_pixel)
+            self._mm_per_pixel_op.blockSignals(False)
+    
+    def _on_mm_per_pixel_changed(self, value: float) -> None:
+        """Atualiza mm/px em tempo real (efeito imediato, sem reiniciar)."""
+        self._settings.preprocess.mm_per_pixel = value
 
     def _update_source_caption(self) -> None:
         """Atualiza a legenda da fonte atual (abaixo do vídeo)."""

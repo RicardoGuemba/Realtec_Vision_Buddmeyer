@@ -89,6 +89,10 @@ O sistema executa o seguinte fluxo a cada detecção:
 - **Brilho / Contraste:** Sliders (-100 a 100) para ajuste fino.
 - **ROI:** Ativar ROI e coordenadas X, Y, Largura (W), Altura (H) da região de interesse.
 
+### Subaba: Sistema
+
+- **Iniciar automaticamente com o Windows:** Quando marcado, o sistema é adicionado à pasta Inicialização do Windows. Após reinício do PC (ex.: falta de energia), o aplicativo inicia automaticamente quando o usuário fizer login. Útil para restabelecer operação sem intervenção manual.
+
 ### Subaba: Controle (CLP)
 
 - **IP do CLP:** Endereço do CLP Omron (ex.: 187.99.124.229).

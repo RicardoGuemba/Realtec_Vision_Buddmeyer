@@ -85,16 +85,24 @@ class MainWindow(QMainWindow):
     
     def _deferred_load_pages(self) -> None:
         """Carrega páginas pesadas após a janela estar visível (evita 'não responde')."""
+        from PySide6.QtWidgets import QApplication
+        
         from streaming import StreamManager
+        QApplication.processEvents()
+        
         from detection import InferenceEngine
         from communication import CIPClient
+        QApplication.processEvents()
+        
         from .pages.operation_page import OperationPage
         from .pages.configuration_page import ConfigurationPage
         from .pages.diagnostics_page import DiagnosticsPage
+        QApplication.processEvents()
         
         self._stream_manager = StreamManager()
         self._inference_engine = InferenceEngine()
         self._cip_client = CIPClient()
+        QApplication.processEvents()
         
         self._operation_page = OperationPage()
         self._configuration_page = ConfigurationPage()

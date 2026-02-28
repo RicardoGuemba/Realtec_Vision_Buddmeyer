@@ -2,6 +2,10 @@
 
 ## [Unreleased] – Higienização e documentação
 
+### Adicionado
+
+- **Auto-início com o Windows:** Nova aba Configuração → Sistema com opção "Iniciar automaticamente com o Windows". Quando habilitada, o sistema é adicionado à pasta Inicialização do Windows e restabelece automaticamente após reinício do PC (ex.: falta de energia). Implementação em `core/windows_startup.py` usando pasta Inicialização do usuário (sem privilégios de admin).
+
 ### Removido
 
 - **docs/DOCUMENTACAO_COMPLETA.md:** Redundante com DOCUMENTACAO_SISTEMA_COMPLETA.md (mais completo).
