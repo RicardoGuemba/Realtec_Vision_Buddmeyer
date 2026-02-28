@@ -163,7 +163,7 @@ Sistema desktop Windows para automação de expedição (pick-and-place) de emba
 ### 4.1 ESTRUTURA DE DIRETÓRIOS
 
 ```
-buddmeyer_vision_v2/
+realtec_vision_buddmeyer/
 ├── main.py                           # Ponto de entrada
 ├── config/
 │   ├── __init__.py

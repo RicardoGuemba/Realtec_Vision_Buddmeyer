@@ -13,4 +13,4 @@ Set-Location $ProjectDir
 & "$ProjectDir\venv\Scripts\Activate.ps1"
 
 # Executa o aplicativo
-python "$ProjectDir\buddmeyer_vision_v2\main.py"
+python "$ProjectDir\realtec_vision_buddmeyer\main.py"

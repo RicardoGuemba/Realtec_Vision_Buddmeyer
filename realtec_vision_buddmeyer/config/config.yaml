@@ -1,0 +1,76 @@
+log_level: INFO
+log_file: logs/buddmeyer_vision.log
+streaming:
+  source_type: usb
+  usb_camera_index: 0
+  gige_ip: ''
+  gige_port: 3956
+  max_frame_buffer_size: 30
+detection:
+  model_path: C:/Realtec_Vision_Buddmeyer/realtec_vision_buddmeyer/models
+  default_model: PekingU/rtdetr_r50vd
+  confidence_threshold: 0.13
+  max_detections: 10
+  inference_fps: 15
+  device: auto
+preprocess:
+  profile: default
+  brightness: 0.0
+  contrast: 0.0
+  roi:
+  - 0
+  - 0
+  - 640
+  - 480
+  mm_per_pixel: 10.0
+cip:
+  ip: 187.99.124.229
+  port: 44818
+  connection_timeout: 10.0
+  timeout_ms: 10000
+  retry_interval: 2.0
+  max_retries: 3
+  io_retries: 2
+  simulated: false
+  heartbeat_interval: 1.0
+  auto_reconnect: true
+robot_control:
+  ack_timeout: 5.0
+  pick_timeout: 30.0
+  place_timeout: 30.0
+tags:
+  VisionReady: VisionCtrl_VisionReady
+  VisionBusy: VisionCtrl_VisionBusy
+  VisionError: VisionCtrl_VisionError
+  VisionHeartbeat: VisionCtrl_Heartbeat
+  ProductDetected: PRODUCT_DETECTED
+  CentroidX: CENTROID_X
+  CentroidY: CENTROID_Y
+  Confidence: CONFIDENCE
+  DetectionCount: DETECTION_COUNT
+  ProcessingTime: PROCESSING_TIME
+  VisionEchoAck: VisionCtrl_EchoAck
+  VisionDataSent: VisionCtrl_DataSent
+  VisionReadyForNext: VisionCtrl_ReadyForNext
+  SystemFault: SYSTEM_FAULT
+  RobotAck: ROBOT_ACK
+  RobotReady: ROBOT_READY
+  RobotError: ROBOT_ERROR
+  RobotBusy: RobotStatus_Busy
+  RobotPickComplete: RobotStatus_PickComplete
+  RobotPlaceComplete: RobotStatus_PlaceComplete
+  PlcAuthorizeDetection: RobotCtrl_AuthorizeDetection
+  PlcCycleStart: RobotCtrl_CycleStart
+  PlcCycleComplete: RobotCtrl_CycleComplete
+  PlcEmergencyStop: RobotCtrl_EmergencyStop
+  PlcSystemMode: RobotCtrl_SystemMode
+  Heartbeat: SystemStatus_Heartbeat
+  SystemMode: SystemStatus_Mode
+  SafetyGateClosed: Safety_GateClosed
+  SafetyAreaClear: Safety_AreaClear
+  SafetyLightCurtainOK: Safety_LightCurtainOK
+  SafetyEmergencyStop: Safety_EmergencyStop
+output:
+  stream_http_enabled: true
+  stream_http_port: 8765
+  stream_http_fps: 10
