@@ -22,6 +22,10 @@ class StreamingSettings(BaseModel):
     usb_camera_index: int = Field(default=0, description="Índice da câmera USB (0 = primeira)")
     gige_ip: str = Field(default="", description="IP da câmera GigE")
     gige_port: int = Field(default=3956, description="Porta da câmera GigE")
+    gentl_cti_path: str = Field(default="", description="Caminho do arquivo CTI GenTL (ex.: Omron Sentech)")
+    gentl_device_index: int = Field(default=0, description="Índice da câmera na lista GenTL (0 = primeira)")
+    gentl_max_dimension: int = Field(default=1920, ge=0, le=4096, description="Dimensão máx. do lado maior (px); 0 = sem redimensionar")
+    gentl_target_fps: float = Field(default=15.0, ge=1.0, le=60.0, description="FPS alvo do stream GenTL (reduz carga em câmeras de alta resolução)")
     max_frame_buffer_size: int = Field(default=30, description="Tamanho máximo do buffer")
 
     @field_validator("source_type")

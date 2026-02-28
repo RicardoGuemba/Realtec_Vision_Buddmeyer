@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
         self._setup_menu()
         self._setup_statusbar()
         self._apply_theme()
+        self._schedule_model_preload()
         
         logger.info("main_window_initialized")
     
@@ -218,6 +219,26 @@ class MainWindow(QMainWindow):
             lambda: self._update_plc_status("Desconectado", "#6c757d")
         )
         self._cip_client.state_changed.connect(self._on_plc_state_changed)
+        
+        # Pré-carregamento do modelo (página de operação)
+        self._operation_page.model_preload_finished.connect(self._on_model_preload_finished)
+    
+    def _schedule_model_preload(self) -> None:
+        """Agenda o pré-carregamento do modelo 2 s após abrir a janela (evita espera ao clicar Iniciar)."""
+        QTimer.singleShot(2000, self._trigger_model_preload)
+    
+    def _trigger_model_preload(self) -> None:
+        """Inicia o carregamento do modelo em segundo plano na página de operação."""
+        self._statusbar.showMessage("Preparando modelo em segundo plano...", 0)
+        self._operation_page.start_model_preload()
+    
+    @Slot(bool)
+    def _on_model_preload_finished(self, success: bool) -> None:
+        """Chamado quando o pré-carregamento do modelo termina."""
+        if success:
+            self._statusbar.showMessage("Modelo pronto para uso.", 5000)
+        else:
+            self._statusbar.showMessage("Modelo será carregado ao clicar em Iniciar.", 5000)
     
     def _apply_theme(self) -> None:
         """Aplica tema industrial."""

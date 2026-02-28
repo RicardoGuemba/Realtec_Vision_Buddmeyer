@@ -7,7 +7,7 @@ from typing import Optional, List
 import numpy as np
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
-from PySide6.QtCore import Qt, Signal, Slot, QTimer, QRect
+from PySide6.QtCore import Qt, Signal, Slot, QTimer, QRect, QSize
 from PySide6.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont
 
 from config import get_settings
@@ -35,6 +35,11 @@ class VideoWidget(QWidget):
         self._show_overlay = True
         self._show_fps = True
         self._current_fps = 0.0
+        # Cache para evitar conversão numpy→QImage→QPixmap a cada paintEvent (reduz travamentos)
+        self._cached_pixmap: Optional[QPixmap] = None
+        self._cached_paint_size: Optional[QSize] = None
+        self._cached_frame_shape: Optional[tuple] = None
+        self._cached_offset_scale: Optional[tuple] = None  # (x, y, scale_x, scale_y)
         
         # Cores para detecções por confiança
         self._colors = {
@@ -77,6 +82,8 @@ class VideoWidget(QWidget):
         """
         self._current_frame = frame
         self._placeholder_label.hide()
+        # Invalida cache para repintar na próxima paintEvent
+        self._cached_frame_shape = None
         self.update()
     
     @Slot(object)
@@ -110,60 +117,73 @@ class VideoWidget(QWidget):
         """Limpa o widget."""
         self._current_frame = None
         self._current_detections = []
+        self._cached_pixmap = None
+        self._cached_paint_size = None
+        self._cached_frame_shape = None
+        self._cached_offset_scale = None
         self._placeholder_label.show()
         self.update()
     
-    def paintEvent(self, event) -> None:
-        """Evento de pintura."""
-        super().paintEvent(event)
-        
+    def _ensure_cached_pixmap(self) -> bool:
+        """Converte o frame atual em QPixmap em cache (só recalcula se frame ou tamanho mudou). Retorna True se há frame para desenhar."""
         if self._current_frame is None:
-            return
-        
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Converte frame para QImage
+            return False
         frame = self._current_frame
-        h, w, ch = frame.shape
+        h, w = frame.shape[:2]
+        ch = frame.shape[2] if len(frame.shape) > 2 else 1
+        if ch == 1:
+            return False
+        widget_size = self.size()
+        frame_shape = (w, h)
+        if (
+            self._cached_pixmap is not None
+            and self._cached_frame_shape == frame_shape
+            and self._cached_paint_size == widget_size
+        ):
+            return True
         bytes_per_line = ch * w
-        
-        # BGR para RGB
         rgb_frame = frame[:, :, ::-1].copy()
-        
         q_image = QImage(
             rgb_frame.data,
             w, h,
             bytes_per_line,
             QImage.Format_RGB888
         )
-        
-        # Escala para caber no widget mantendo proporção
-        widget_size = self.size()
         scaled_pixmap = QPixmap.fromImage(q_image).scaled(
             widget_size,
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation
         )
-        
-        # Centraliza a imagem
         x = (widget_size.width() - scaled_pixmap.width()) // 2
         y = (widget_size.height() - scaled_pixmap.height()) // 2
-        
-        painter.drawPixmap(x, y, scaled_pixmap)
-        
-        # Calcula fator de escala
         scale_x = scaled_pixmap.width() / w
         scale_y = scaled_pixmap.height() / h
+        self._cached_pixmap = scaled_pixmap
+        self._cached_paint_size = QSize(widget_size)
+        self._cached_frame_shape = frame_shape
+        self._cached_offset_scale = (x, y, scale_x, scale_y)
+        return True
+    
+    def resizeEvent(self, event) -> None:
+        """Invalida cache ao redimensionar para redesenhar na nova escala."""
+        self._cached_paint_size = None
+        super().resizeEvent(event)
+    
+    def paintEvent(self, event) -> None:
+        """Evento de pintura (usa cache para evitar conversão pesada a cada repaint)."""
+        super().paintEvent(event)
         
-        # Desenha overlay de detecções
+        if not self._ensure_cached_pixmap():
+            return
+        
+        x, y, scale_x, scale_y = self._cached_offset_scale
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.drawPixmap(x, y, self._cached_pixmap)
         if self._show_overlay and self._current_detections:
             self._draw_detections(painter, x, y, scale_x, scale_y)
-        
-        # Desenha FPS
         if self._show_fps:
             self._draw_fps(painter)
-        
         painter.end()
     
     def _draw_detections(

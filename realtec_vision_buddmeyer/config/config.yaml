@@ -5,6 +5,10 @@ streaming:
   usb_camera_index: 0
   gige_ip: ''
   gige_port: 3956
+  gentl_cti_path: C:/Program Files/Common Files/OMRON_SENTECH/GenTL/v1_5/StGenTL_MD_VC141_v1_5_x64.cti
+  gentl_device_index: 0
+  gentl_max_dimension: 1920
+  gentl_target_fps: 4.0
   max_frame_buffer_size: 30
 detection:
   model_path: C:/Realtec_Vision_Buddmeyer/realtec_vision_buddmeyer/models
@@ -14,7 +18,7 @@ detection:
   inference_fps: 15
   device: auto
 preprocess:
-  profile: default
+  profile: bright
   brightness: 0.0
   contrast: 0.0
   roi:
