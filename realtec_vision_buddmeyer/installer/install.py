@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Instalador do Buddmeyer Vision System v2.0
+Instalador do Realtec Vision Buddmeyer v2.0
 Instala Python, dependências e configura o sistema.
 """
 
@@ -202,27 +202,27 @@ def create_start_scripts(project_dir, venv_python):
     
     # Script BAT
     bat_content = f"""@echo off
-title Buddmeyer Vision System v2.0
+title Realtec Vision Buddmeyer v2.0
 cd /d "{project_dir}"
 call venv\\Scripts\\activate.bat
 python realtec_vision_buddmeyer\\main.py
 pause
 """
     
-    bat_file = project_dir / "Iniciar_Buddmeyer_Vision.bat"
+    bat_file = project_dir / "Iniciar_Realtec_Vision_Buddmeyer.bat"
     with open(bat_file, "w", encoding="utf-8") as f:
         f.write(bat_content)
     print_success(f"Script criado: {bat_file.name}")
     
     # Script PowerShell
-    ps_content = f"""# Buddmeyer Vision System v2.0
+    ps_content = f"""# Realtec Vision Buddmeyer v2.0
 $ErrorActionPreference = "Stop"
 Set-Location "{project_dir}"
 & "{project_dir}\\venv\\Scripts\\Activate.ps1"
 python "{project_dir}\\realtec_vision_buddmeyer\\main.py"
 """
     
-    ps_file = project_dir / "Iniciar_Buddmeyer_Vision.ps1"
+    ps_file = project_dir / "Iniciar_Realtec_Vision_Buddmeyer.ps1"
     with open(ps_file, "w", encoding="utf-8") as f:
         f.write(ps_content)
     print_success(f"Script criado: {ps_file.name}")
@@ -262,7 +262,7 @@ def verify_installation(venv_python):
 
 def main():
     """Função principal do instalador."""
-    print_header("BUDDMEYER VISION SYSTEM v2.0 - INSTALADOR")
+    print_header("REALTEC VISION BUDDMEYER v2.0 - INSTALADOR")
     
     print_info(f"Sistema Operacional: {platform.system()} {platform.release()}")
     print_info(f"Arquitetura: {platform.machine()}")
@@ -271,7 +271,7 @@ def main():
     if len(sys.argv) > 1:
         install_dir = Path(sys.argv[1])
     else:
-        install_dir = Path.home() / "BuddmeyerVision"
+        install_dir = Path.home() / "RealtecVisionBuddmeyer"
     
     print_info(f"Diretório de instalação: {install_dir}")
     
@@ -364,7 +364,7 @@ def main():
         print_success(f"Sistema instalado em: {install_dir}")
         print_info("\nPara iniciar o sistema:")
         print_info(f"  1. Navegue até: {install_dir}")
-        print_info(f"  2. Dê duplo clique em: Iniciar_Buddmeyer_Vision.bat")
+        print_info(f"  2. Dê duplo clique em: Iniciar_Realtec_Vision_Buddmeyer.bat")
         print_info("\nOu execute no terminal:")
         print_info(f"  cd {install_dir}")
         print_info(f"  .\\venv\\Scripts\\activate")

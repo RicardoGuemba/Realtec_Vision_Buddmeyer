@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Módulo de comunicação CIP do sistema Buddmeyer Vision v2.0
+Módulo de comunicação CIP do sistema Realtec Vision Buddmeyer v2.0
 """
 
 from .cip_client import CIPClient

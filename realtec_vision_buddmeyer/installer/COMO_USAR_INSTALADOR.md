@@ -4,7 +4,7 @@
 
 O instalador foi criado em:
 ```
-realtec_vision_buddmeyer/installer/dist/BuddmeyerVisionInstaller.exe
+realtec_vision_buddmeyer/installer/dist/RealtecVisionBuddmeyerInstaller.exe
 ```
 
 ## 🎯 Como Executar o Instalador
@@ -13,14 +13,14 @@ realtec_vision_buddmeyer/installer/dist/BuddmeyerVisionInstaller.exe
 
 Dê duplo clique em:
 ```
-BuddmeyerVisionInstaller.exe
+RealtecVisionBuddmeyerInstaller.exe
 ```
 
 ### Passo 2: Siga as instruções
 
 O instalador irá:
 1. ✅ Verificar se Python 3.10+ está instalado
-2. ✅ Criar diretório de instalação (padrão: `C:\Users\[Usuário]\BuddmeyerVision`)
+2. ✅ Criar diretório de instalação (padrão: `C:\Users\[Usuário]\RealtecVisionBuddmeyer`)
 3. ✅ Copiar todos os arquivos do projeto
 4. ✅ Criar ambiente virtual Python
 5. ✅ Instalar todas as dependências:
@@ -44,16 +44,16 @@ A instalação pode levar **10-30 minutos** dependendo da velocidade da internet
 
 Após a instalação:
 
-1. Navegue até o diretório de instalação (ex: `C:\Users\[Usuário]\BuddmeyerVision`)
+1. Navegue até o diretório de instalação (ex: `C:\Users\[Usuário]\RealtecVisionBuddmeyer`)
 
 2. Dê duplo clique em:
    ```
-   Iniciar_Buddmeyer_Vision.bat
+   Iniciar_Realtec_Vision_Buddmeyer.bat
    ```
 
 Ou execute no terminal:
 ```powershell
-cd C:\Users\[Usuário]\BuddmeyerVision
+cd C:\Users\[Usuário]\RealtecVisionBuddmeyer
 .\venv\Scripts\activate
 python realtec_vision_buddmeyer\main.py
 ```
@@ -107,11 +107,11 @@ Você verá:
 ============================================================
 INSTALAÇÃO CONCLUÍDA COM SUCESSO!
 ============================================================
-✓ Sistema instalado em: C:\Users\[Usuário]\BuddmeyerVision
+✓ Sistema instalado em: C:\Users\[Usuário]\RealtecVisionBuddmeyer
 
 Para iniciar o sistema:
-  1. Navegue até: C:\Users\[Usuário]\BuddmeyerVision
-  2. Dê duplo clique em: Iniciar_Buddmeyer_Vision.bat
+  1. Navegue até: C:\Users\[Usuário]\RealtecVisionBuddmeyer
+  2. Dê duplo clique em: Iniciar_Realtec_Vision_Buddmeyer.bat
 ```
 
 ## 📞 Suporte

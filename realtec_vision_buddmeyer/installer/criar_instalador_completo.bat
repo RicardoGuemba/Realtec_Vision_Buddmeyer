@@ -1,5 +1,5 @@
 @echo off
-title Criar Instalador Completo - Buddmeyer Vision v2.0
+title Criar Instalador Completo - Realtec Vision Buddmeyer v2.0
 echo ============================================================
 echo CRIANDO INSTALADOR COMPLETO
 echo ============================================================
@@ -21,7 +21,7 @@ if %ERRORLEVEL% EQU 0 (
     echo INSTALADOR CRIADO COM SUCESSO!
     echo ============================================================
     echo.
-    echo Arquivo criado em: dist\BuddmeyerVisionInstallerCompleto.exe
+    echo Arquivo criado em: dist\RealtecVisionBuddmeyerInstallerCompleto.exe
     echo.
 ) else (
     echo.

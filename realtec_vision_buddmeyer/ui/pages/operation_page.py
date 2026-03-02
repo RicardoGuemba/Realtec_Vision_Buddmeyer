@@ -4,22 +4,24 @@ Página de Operação - Aba principal para operação do sistema.
 """
 
 import asyncio
+import time
 from typing import Optional
 
 import numpy as np
+from core.async_utils import safe_create_task
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QPushButton, QComboBox, QLabel, QDoubleSpinBox,
     QSplitter, QGroupBox, QCheckBox
 )
-from PySide6.QtCore import Qt, Slot, QTimer
+from PySide6.QtCore import Qt, Slot, QTimer, QThread, Signal
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 
 from config import get_settings
 from core.logger import get_logger
 from core.metrics import MetricsCollector
 from output import StreamFrameProvider, MjpegStreamServer
-from preprocessing.transforms import pixel_to_mm
+from preprocessing.transforms import pixel_to_mm, clamp_centroid_to_confinement
 from streaming import StreamManager
 from detection import InferenceEngine
 from communication import CIPClient
@@ -28,6 +30,22 @@ from control import RobotController
 from ui.widgets.video_widget import VideoWidget
 from ui.widgets.status_panel import StatusPanel
 from ui.widgets.event_console import EventConsole
+
+
+class ModelLoadWorker(QThread):
+    """Worker para carregar modelo em background (evita bloquear UI)."""
+    finished = Signal(bool)  # True = sucesso, False = falha
+
+    def __init__(self, inference_engine: InferenceEngine):
+        super().__init__()
+        self._engine = inference_engine
+
+    def run(self) -> None:
+        try:
+            success = self._engine.load_model()
+            self.finished.emit(success)
+        except Exception:
+            self.finished.emit(False)
 
 
 class OperationPage(QWidget):
@@ -40,7 +58,9 @@ class OperationPage(QWidget):
     - Console de eventos
     - Controles de operação
     """
-    
+
+    model_preload_finished = Signal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -60,10 +80,14 @@ class OperationPage(QWidget):
         # Contador de frames para comunicação periódica com CLP
         self._frame_count = 0
         self._communication_interval = 25  # Comunicar a cada 25 frames
+        self._last_centroid_send_time = 0.0  # Throttle: intervalo mínimo entre envios (objeto muito perto)
+        self._min_send_interval_s = 0.5  # Mínimo 500 ms entre envios ao CLP
         self._last_best_detection = None  # Armazena última melhor detecção
         self._detection_count = 0  # Contador total de detecções
         self._error_count = 0  # Contador total de erros
-        
+        self._model_load_worker: Optional[ModelLoadWorker] = None
+        self._preload_worker: Optional[ModelLoadWorker] = None
+
         self._setup_ui()
         self._sync_combo_to_settings()
         self._connect_signals()
@@ -255,6 +279,18 @@ class OperationPage(QWidget):
         self._mm_per_pixel_op.valueChanged.connect(self._on_mm_per_pixel_changed)
         controls_layout.addWidget(self._mm_per_pixel_op)
         
+        # Toggle para exibir ROI de confinamento
+        self._show_roi_cb = QCheckBox("ROI")
+        self._show_roi_cb.setToolTip(
+            "Exibe/oculta o retângulo da ROI de confinamento na imagem.\n"
+            "O retângulo amarelo indica a área válida para centroides."
+        )
+        self._show_roi_cb.setChecked(False)
+        self._show_roi_cb.stateChanged.connect(
+            lambda state: self._video_widget.set_show_confinement_roi(state == Qt.Checked)
+        )
+        controls_layout.addWidget(self._show_roi_cb)
+
         # Separador visual
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.VLine)
@@ -290,32 +326,35 @@ class OperationPage(QWidget):
         self._continuous_cb.setChecked(False)
         self._continuous_cb.setToolTip(
             "Marcado: ciclos de pick-and-place executam automaticamente.\n"
-            "Desmarcado: aguarda 'Novo Ciclo' ao final de cada ciclo."
+            "Desmarcado: aguarda 'Autorizar envio ao CLP' após detecção."
         )
         self._continuous_cb.stateChanged.connect(self._on_cycle_mode_changed)
         controls_layout.addWidget(self._continuous_cb)
         
-        self._new_cycle_btn = QPushButton("Novo Ciclo")
-        self._new_cycle_btn.setMinimumWidth(100)
-        self._new_cycle_btn.setEnabled(False)
-        self._new_cycle_btn.setStyleSheet("""
+        self._stop_cycle_btn = QPushButton("Stop")
+        self._stop_cycle_btn.setMinimumWidth(100)
+        self._stop_cycle_btn.setEnabled(False)
+        self._stop_cycle_btn.setStyleSheet("""
             QPushButton {
-                background-color: #007bff;
+                background-color: #dc3545;
                 color: white;
                 font-weight: bold;
                 padding: 8px 16px;
                 border-radius: 4px;
             }
             QPushButton:hover {
-                background-color: #0069d9;
+                background-color: #c82333;
             }
             QPushButton:disabled {
                 background-color: #6c757d;
             }
         """)
-        self._new_cycle_btn.setToolTip("Autoriza o proximo ciclo de pick-and-place (modo manual)")
-        self._new_cycle_btn.clicked.connect(self._authorize_new_cycle)
-        controls_layout.addWidget(self._new_cycle_btn)
+        self._stop_cycle_btn.setToolTip(
+            "Interrompe imediatamente o ciclo e comandos ao robô. "
+            "Detecções continuam ativas; apenas envio ao CLP e comandos ao robô são parados."
+        )
+        self._stop_cycle_btn.clicked.connect(self._stop_cycle_immediately)
+        controls_layout.addWidget(self._stop_cycle_btn)
         
         layout.addWidget(controls_frame)
     
@@ -389,7 +428,22 @@ class OperationPage(QWidget):
         # F11 - Fullscreen
         fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
         fullscreen_shortcut.activated.connect(self._toggle_fullscreen)
-    
+
+    def start_model_preload(self) -> None:
+        """Pré-carrega o modelo em background (chamado pela MainWindow 2s após abrir)."""
+        if self._inference_engine.is_model_loaded:
+            self.model_preload_finished.emit(True)
+            return
+        self._preload_worker = ModelLoadWorker(self._inference_engine)
+        self._preload_worker.finished.connect(self._on_preload_finished)
+        self._preload_worker.start()
+
+    def _on_preload_finished(self, success: bool) -> None:
+        if self._preload_worker:
+            self._preload_worker.finished.disconnect(self._on_preload_finished)
+            self._preload_worker = None
+        self.model_preload_finished.emit(success)
+
     @Slot()
     def _start_system(self) -> None:
         """Inicia o sistema."""
@@ -438,15 +492,35 @@ class OperationPage(QWidget):
         self._event_console.add_info(
             f"Stream iniciado: {source_labels[source_index]}"
         )
-        
-        # Carrega modelo (se não carregado)
+
+        # Carrega modelo (se não carregado) — em background para não bloquear UI
         if not self._inference_engine.is_model_loaded:
-            self._event_console.add_info("Carregando modelo de detecção...")
-            if not self._inference_engine.load_model():
-                self._event_console.add_error("Falha ao carregar modelo")
-                self._stream_manager.stop()
-                return
-        
+            self._event_console.add_info("Carregando modelo de detecção... (não bloqueia a interface)")
+            self._model_load_worker = ModelLoadWorker(self._inference_engine)
+            self._model_load_worker.finished.connect(self._on_model_load_finished)
+            self._model_load_worker.start()
+            self._play_btn.setEnabled(False)
+            return
+
+        self._continue_start_after_model(source_labels[source_index])
+
+    def _on_model_load_finished(self, success: bool) -> None:
+        """Handler para conclusão do carregamento do modelo em background."""
+        if self._model_load_worker:
+            self._model_load_worker.finished.disconnect(self._on_model_load_finished)
+            self._model_load_worker = None
+        self._play_btn.setEnabled(True)
+        if not success:
+            self._event_console.add_error("Falha ao carregar modelo")
+            self._stream_manager.stop()
+            return
+        self._event_console.add_success("Modelo carregado com sucesso")
+        source_labels = ["Câmera USB", "Câmera GigE"]
+        source_index = self._source_combo.currentIndex()
+        self._continue_start_after_model(source_labels[source_index])
+
+    def _continue_start_after_model(self, source_label: str) -> None:
+        """Continua o fluxo de início após modelo carregado (inferência, CLP, robô)."""
         # Inicia inferência
         if not self._inference_engine.start():
             self._event_console.add_error("Falha ao iniciar inferência")
@@ -460,7 +534,7 @@ class OperationPage(QWidget):
         self._robot_controller.set_cycle_mode(cycle_mode)
         
         # Conecta ao CLP e inicia controlador de robô
-        asyncio.create_task(self._connect_plc_and_start_robot())
+        safe_create_task(self._connect_plc_and_start_robot(), "connect_plc_start_robot")
         
         self._is_running = True
         self._update_ui_state()
@@ -481,7 +555,7 @@ class OperationPage(QWidget):
                 self._event_console.add_warning("Stream MJPEG não iniciado (porta em uso?)")
 
         self._event_console.add_success(
-            f"Sistema iniciado [{source_labels[source_index]}]"
+            f"Sistema iniciado [{source_label}]"
         )
         self._status_panel.set_system_status("RUNNING")
     
@@ -545,6 +619,8 @@ class OperationPage(QWidget):
         Chamado a cada 25 frames.
         Usa as TAGs definidas: CENTROID_X, CENTROID_Y, CONFIDENCE, etc.
         Inclui handshake básico: só envia se CLP conectado e visão OK.
+        Não envia durante ciclo do robô (pick/place) para evitar sobrescrever coordenadas em uso.
+        Throttle: intervalo mínimo entre envios (evita flood quando objeto muito perto).
         """
         if self._last_best_detection is None:
             return
@@ -559,13 +635,40 @@ class OperationPage(QWidget):
             self._logger.debug("skipping_centroid_plc_degraded")
             return
         
+        # Não envia quando robô parado (Stop acionado) ou durante ciclo ativo
+        from control.robot_controller import RobotControlState
+        state = self._robot_controller.state.value
+        if state == RobotControlState.STOPPED.value:
+            self._logger.debug("skipping_centroid_plc_robot_stopped")
+            return
+        cycle_states = {
+            RobotControlState.SENDING_DATA.value,
+            RobotControlState.WAITING_ACK.value,
+            RobotControlState.ACK_CONFIRMED.value,
+            RobotControlState.WAITING_PICK.value,
+            RobotControlState.WAITING_PLACE.value,
+            RobotControlState.WAITING_CYCLE_START.value,
+        }
+        if state in cycle_states:
+            self._logger.debug("skipping_centroid_plc_robot_in_cycle", state=state)
+            return
+        
+        # Throttle: intervalo mínimo entre envios (objeto muito perto = detecção contínua)
+        now = time.perf_counter()
+        if now - self._last_centroid_send_time < self._min_send_interval_s:
+            self._logger.debug("skipping_centroid_plc_throttle")
+            return
+        self._last_centroid_send_time = now
+        
         detection = self._last_best_detection
         mm_per_px = self._settings.preprocess.mm_per_pixel
         cx_px, cy_px = detection.centroid
         centroid_x, centroid_y = pixel_to_mm((cx_px, cy_px), mm_per_px)
         confidence = detection.confidence
-        
-        # Log da comunicação
+
+        # Confinamento de centroide (se habilitado)
+        centroid_x, centroid_y = self._apply_confinement(centroid_x, centroid_y, mm_per_px)
+
         self._logger.info(
             "communicating_centroid_to_plc",
             frame=self._frame_count,
@@ -575,21 +678,52 @@ class OperationPage(QWidget):
             plc_status=self._cip_client._state.status.value,
         )
         
-        # Mensagem no console (a cada 25 frames para não poluir)
         self._event_console.add_info(
             f"[Frame {self._frame_count}] Enviando centroide: ({centroid_x:.1f}, {centroid_y:.1f}) - Conf: {confidence:.0%}",
             "CLP"
         )
         
         # Envia dados ao CLP usando as TAGs definidas
-        asyncio.create_task(self._send_detection_to_plc(
-            centroid_x=centroid_x,
-            centroid_y=centroid_y,
-            confidence=confidence,
-            detection_count=detection.detection_count,
-            processing_time=detection.inference_time_ms,
-        ))
+        safe_create_task(
+            self._send_detection_to_plc(
+                centroid_x=centroid_x,
+                centroid_y=centroid_y,
+                confidence=confidence,
+                detection_count=detection.detection_count,
+                processing_time=detection.inference_time_ms,
+            ),
+            "send_detection_to_plc",
+        )
     
+    def _apply_confinement(
+        self, cx_mm: float, cy_mm: float, mm_per_px: float
+    ) -> tuple:
+        """
+        Aplica confinamento de centroide se habilitado.
+        Usa o centro da imagem (derivado da resolução do stream) como origem.
+        """
+        conf = self._settings.preprocess.confinement
+        if not conf.enabled:
+            return (cx_mm, cy_mm)
+
+        # Determina centro da imagem em mm
+        frame_info = self._stream_manager.get_current_frame_info()
+        if frame_info is not None:
+            img_center_px = (frame_info.width / 2.0, frame_info.height / 2.0)
+        else:
+            img_center_px = (320.0, 240.0)  # fallback razoável
+
+        img_center_mm = pixel_to_mm(img_center_px, mm_per_px)
+
+        return clamp_centroid_to_confinement(
+            centroid_mm=(cx_mm, cy_mm),
+            image_center_mm=img_center_mm,
+            x_pos_mm=conf.x_positive_mm,
+            x_neg_mm=conf.x_negative_mm,
+            y_pos_mm=conf.y_positive_mm,
+            y_neg_mm=conf.y_negative_mm,
+        )
+
     async def _send_detection_to_plc(
         self,
         centroid_x: float,
@@ -682,11 +816,12 @@ class OperationPage(QWidget):
         self._stream_manager.stop()
         
         # Seta VisionReady = False e desconecta CLP
-        asyncio.create_task(self._shutdown_plc_connection())
+        safe_create_task(self._shutdown_plc_connection(), "shutdown_plc")
         
         self._is_running = False
         self._frame_count = 0
         self._last_best_detection = None
+        self._last_centroid_send_time = 0.0
         self._update_ui_state()
         
         # Reseta texto do botão pause caso estivesse pausado
@@ -727,11 +862,9 @@ class OperationPage(QWidget):
         self._stop_btn.setEnabled(self._is_running)
         self._source_combo.setEnabled(not self._is_running)
         
-        # Controles de ciclo
-        is_manual = not self._continuous_cb.isChecked()
-        self._new_cycle_btn.setEnabled(
-            self._is_running and is_manual
-            and self._robot_controller.state.value == "READY_FOR_NEXT"
+        # Botão Stop: habilitado quando sistema rodando e robô não está parado
+        self._stop_cycle_btn.setEnabled(
+            self._is_running and self._robot_controller.state.value != "STOPPED"
         )
         
         if not self._is_running:
@@ -841,15 +974,28 @@ class OperationPage(QWidget):
         """Handler para mudança de modo de ciclo (manual/contínuo)."""
         mode = "continuous" if self._continuous_cb.isChecked() else "manual"
         self._robot_controller.set_cycle_mode(mode)
-        self._new_cycle_btn.setEnabled(not self._continuous_cb.isChecked() and self._is_running)
+        self._stop_cycle_btn.setEnabled(
+            self._is_running and self._robot_controller.state.value != "STOPPED"
+        )
         label = "Contínuo" if mode == "continuous" else "Manual"
         self._event_console.add_info(f"Modo de ciclo: {label}")
     
-    def _authorize_new_cycle(self) -> None:
-        """Autoriza o próximo ciclo de pick-and-place (modo manual)."""
-        self._robot_controller.authorize_next_cycle()
-        self._new_cycle_btn.setEnabled(False)
-        self._event_console.add_info("Novo ciclo autorizado pelo operador")
+    def _stop_cycle_immediately(self) -> None:
+        """Interrompe imediatamente o ciclo e comandos ao robô. Detecções continuam ativas."""
+        self._robot_controller.stop()
+        self._stop_cycle_btn.setEnabled(False)
+        self._event_console.add_warning(
+            "Ciclo interrompido. Detecções ativas; envio ao CLP e comandos ao robô parados.",
+            "Robô"
+        )
+        self._status_step_label.setText("Parado (Stop acionado)")
+        # Sinaliza ao CLP que visão não está enviando coordenadas
+        async def _set_vision_not_ready():
+            try:
+                await self._cip_client.set_vision_ready(False)
+            except Exception as e:
+                self._logger.warning("failed_to_set_vision_ready_on_stop", error=str(e))
+        safe_create_task(_set_vision_not_ready(), "set_vision_ready_false")
     
     def _authorize_send_to_plc(self) -> None:
         """Autoriza envio das coordenadas ao CLP apos deteccao (modo manual)."""
@@ -871,7 +1017,7 @@ class OperationPage(QWidget):
             RobotControlState.WAITING_PICK.value: "Aguardando PICK (coleta)...",
             RobotControlState.WAITING_PLACE.value: "Aguardando PLACE (posicionamento)...",
             RobotControlState.WAITING_CYCLE_START.value: "Aguardando sinal de ciclo completo...",
-            RobotControlState.READY_FOR_NEXT.value: "Ciclo finalizado. Aguardando 'Novo Ciclo' (modo manual).",
+            RobotControlState.READY_FOR_NEXT.value: "Ciclo finalizado. Aguardando próxima detecção.",
             RobotControlState.ERROR.value: "Erro no ciclo.",
             RobotControlState.TIMEOUT.value: "Timeout. Aguardando novo ciclo.",
             RobotControlState.SAFETY_BLOCKED.value: "Seguranca ativa. Aguardando liberacao.",
@@ -887,15 +1033,10 @@ class OperationPage(QWidget):
         # Barra de status
         self._status_step_label.setText(self._status_message_for_state(state_value))
         
-        # Botao Novo Ciclo
-        if (
-            state_value == RobotControlState.READY_FOR_NEXT.value
-            and self._robot_controller.cycle_mode == "manual"
-            and self._is_running
-        ):
-            self._new_cycle_btn.setEnabled(True)
-        else:
-            self._new_cycle_btn.setEnabled(False)
+        # Botão Stop: habilitado quando rodando e robô não parado
+        self._stop_cycle_btn.setEnabled(
+            self._is_running and state_value != RobotControlState.STOPPED.value
+        )
         
         # Botao Autorizar envio ao CLP (modo manual, apos deteccao)
         if (
@@ -946,10 +1087,10 @@ class OperationPage(QWidget):
             "Ciclo"
         )
         
-        # Em modo manual, informa que aguarda autorização
+        # Em modo manual, informa que aguarda autorização para próximo ciclo
         if self._robot_controller.cycle_mode == "manual":
-            self._event_console.add_warning(
-                "Aguardando operador clicar 'Novo Ciclo' para continuar.",
+            self._event_console.add_info(
+                "Ciclo concluído. Aguardando próxima detecção e autorização para envio.",
                 "Ciclo"
             )
     

@@ -94,4 +94,4 @@ Os nomes das tags no CLP podem ser alterados via arquivo `config/config.yaml` (s
 
 - **Documento:** v1.0  
 - **Alinhado ao:** PRD Correção e Aprimoramento da Comunicação PC ↔ CLP  
-- **Última atualização:** conforme implementação atual do Buddmeyer Vision v2.
+- **Última atualização:** conforme implementação atual do Realtec Vision Buddmeyer v2.

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Módulo de streaming de vídeo do sistema Buddmeyer Vision v2.0
+Módulo de streaming de vídeo do sistema Realtec Vision Buddmeyer v2.0
 """
 
 from .stream_manager import StreamManager

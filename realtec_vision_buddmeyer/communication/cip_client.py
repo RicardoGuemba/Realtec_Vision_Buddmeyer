@@ -4,6 +4,7 @@ Cliente CIP para comunicação com CLP Omron NX102.
 """
 
 import asyncio
+import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +16,7 @@ from PySide6.QtCore import QObject, Signal, QTimer
 
 from config import get_settings
 from core.logger import get_logger
+from core.async_utils import safe_create_task
 from core.metrics import MetricsCollector
 
 from .tag_map import TagMap
@@ -282,6 +284,9 @@ class CIPClient(QObject):
                 )
                 
                 self._state.last_connected = datetime.now()
+                self._state.error_count = 0
+                self._state.last_error = None
+                self._state.reconnect_attempts = 0
                 self._update_state(ConnectionStatus.CONNECTED)
                 self._cip_logger.log_connect(self._ip, True)
                 self._start_heartbeat()
@@ -301,6 +306,8 @@ class CIPClient(QObject):
         """Conecta em modo simulado."""
         self._simulated_plc = SimulatedPLC()
         self._state.is_simulated = True
+        self._state.error_count = 0
+        self._state.last_error = None
         self._update_state(ConnectionStatus.SIMULATED)
         self._start_heartbeat()
         self.connected.emit()
@@ -485,10 +492,12 @@ class CIPClient(QObject):
         """
         Escreve resultado de detecção nos TAGs do CLP.
         
+        Valida coordenadas antes de enviar (evita valores inválidos por mm/px mal configurado).
+        
         Args:
             detected: Se produto foi detectado
-            centroid_x: Coordenada X do centroide
-            centroid_y: Coordenada Y do centroide
+            centroid_x: Coordenada X do centroide (mm)
+            centroid_y: Coordenada Y do centroide (mm)
             confidence: Confiança (0-1)
             detection_count: Número de detecções
             processing_time: Tempo de processamento (ms)
@@ -496,6 +505,21 @@ class CIPClient(QObject):
         Returns:
             True se todos os TAGs foram escritos
         """
+        # Validação de coordenadas (evita envio de valores inválidos ao CLP)
+        COORD_MIN, COORD_MAX = -10000.0, 10000.0
+        if not (COORD_MIN <= centroid_x <= COORD_MAX and COORD_MIN <= centroid_y <= COORD_MAX):
+            logger.warning(
+                "centroid_out_of_range_rejected",
+                centroid_x=centroid_x,
+                centroid_y=centroid_y,
+                range=(COORD_MIN, COORD_MAX),
+            )
+            return False
+        import math
+        if math.isnan(centroid_x) or math.isnan(centroid_y) or math.isinf(centroid_x) or math.isinf(centroid_y):
+            logger.warning("centroid_nan_or_inf_rejected", centroid_x=centroid_x, centroid_y=centroid_y)
+            return False
+
         try:
             await self.write_tag("ProductDetected", detected)
             await self.write_tag("CentroidX", centroid_x)
@@ -586,7 +610,7 @@ class CIPClient(QObject):
             self._reconnect_timer.deleteLater()
             self._reconnect_timer = None
         if not self._state.is_connected and self._state.status != ConnectionStatus.CONNECTING:
-            asyncio.create_task(self._try_reconnect())
+            safe_create_task(self._try_reconnect(), "cip_try_reconnect")
     
     async def _try_reconnect(self) -> None:
         """Desconecta e tenta reconectar (usado por reconexão automática)."""
@@ -600,6 +624,7 @@ class CIPClient(QObject):
         await self.connect()
         if self._state.is_connected:
             self._reconnect_attempts = 0
+            self._state.reconnect_attempts = 0
             logger.info("cip_reconnect_ok")
     
     def _start_heartbeat(self) -> None:
@@ -623,8 +648,10 @@ class CIPClient(QObject):
         """Envia heartbeat."""
         self._heartbeat_value = not self._heartbeat_value
         
-        # Usa run_coroutine para executar async em thread Qt
-        asyncio.create_task(self.write_tag("VisionHeartbeat", self._heartbeat_value))
+        safe_create_task(
+            self.write_tag("VisionHeartbeat", self._heartbeat_value),
+            "cip_heartbeat",
+        )
     
     @property
     def is_connected(self) -> bool:

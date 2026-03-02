@@ -1,5 +1,5 @@
 @echo off
-title Criar Instalador - Buddmeyer Vision System
+title Criar Instalador - Realtec Vision Buddmeyer
 echo ========================================
 echo Criando Instalador .exe
 echo ========================================
@@ -18,13 +18,13 @@ REM Cria o instalador
 echo Criando instalador...
 python build_installer.py
 
-if exist "dist\BuddmeyerVisionInstaller.exe" (
+if exist "dist\RealtecVisionBuddmeyerInstaller.exe" (
     echo.
     echo ========================================
     echo INSTALADOR CRIADO COM SUCESSO!
     echo ========================================
     echo.
-    echo Arquivo: dist\BuddmeyerVisionInstaller.exe
+    echo Arquivo: dist\RealtecVisionBuddmeyerInstaller.exe
     echo.
     pause
 ) else (

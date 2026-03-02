@@ -1,6 +1,6 @@
 # Pick-and-Place para Expedição de Embalagens
 
-Buddmeyer Vision System v2.0 — Operação **sem robô físico conectado ao CLP**: processo inicia na detecção, com status de cada etapa na tela de operação, tempos realistas de expedição e modo manual por padrão.
+Realtec Vision Buddmeyer v2.0 — Operação **sem robô físico conectado ao CLP**: processo inicia na detecção, com status de cada etapa na tela de operação, tempos realistas de expedição e modo manual por padrão.
 
 ---
 
@@ -113,4 +113,4 @@ Esses valores podem ser ajustados no código do `SimulatedPLC` (`communication/c
 ---
 
 **Documento:** v1.0  
-**Projeto:** Buddmeyer Vision System v2.0 — Pick-and-Place para expedição (sem robô físico).
+**Projeto:** Realtec Vision Buddmeyer v2.0 — Pick-and-Place para expedição (sem robô físico).

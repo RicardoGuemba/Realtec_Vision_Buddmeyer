@@ -19,7 +19,7 @@ criar_instalador_completo.bat
 PASSO 3: Aguardar Conclusão
 ----------------------------
 - O processo pode levar 5-15 minutos
-- O arquivo será criado em: dist\BuddmeyerVisionInstallerCompleto.exe
+- O arquivo será criado em: dist\RealtecVisionBuddmeyerInstallerCompleto.exe
 
 PASSO 4: Testar o Instalador
 -----------------------------
@@ -47,7 +47,7 @@ DISTRIBUIÇÃO:
 ============================================================
 
 Para distribuir o sistema, envie apenas:
-- BuddmeyerVisionInstallerCompleto.exe
+- RealtecVisionBuddmeyerInstallerCompleto.exe
 
 O usuário executa o .exe e tudo é instalado automaticamente!
 

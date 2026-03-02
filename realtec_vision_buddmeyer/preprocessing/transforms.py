@@ -23,6 +23,53 @@ def pixel_to_mm(centroid_px: Tuple[float, float], mm_per_pixel: float) -> Tuple[
         centroid_px[0] * mm_per_pixel,
         centroid_px[1] * mm_per_pixel,
     )
+
+
+def clamp_centroid_to_confinement(
+    centroid_mm: Tuple[float, float],
+    image_center_mm: Tuple[float, float],
+    x_pos_mm: float,
+    x_neg_mm: float,
+    y_pos_mm: float,
+    y_neg_mm: float,
+) -> Tuple[float, float]:
+    """
+    Projeta o centroide para dentro da ROI de confinamento.
+
+    A ROI é definida em torno do centro da imagem (em mm) usando limites
+    no plano cartesiano: X+ (direita), X- (esquerda), Y+ (acima), Y- (abaixo).
+    Eixo Y do plano cartesiano é invertido em relação a pixels: Y+ = para cima
+    = valor menor de pixel, Y- = para baixo = valor maior de pixel.
+
+    Se o centroide estiver fora da ROI, retorna o ponto mais próximo dentro dela.
+
+    Args:
+        centroid_mm: (cx, cy) centroide em mm (coordenadas de imagem).
+        image_center_mm: (ox, oy) centro da imagem em mm.
+        x_pos_mm: limite X positivo (mm à direita do centro).
+        x_neg_mm: limite X negativo (mm à esquerda do centro).
+        y_pos_mm: limite Y positivo (mm acima do centro — valor pixel menor).
+        y_neg_mm: limite Y negativo (mm abaixo do centro — valor pixel maior).
+
+    Returns:
+        Centroide confinado (cx', cy') em mm.
+    """
+    cx, cy = centroid_mm
+    ox, oy = image_center_mm
+
+    x_min = ox - x_neg_mm
+    x_max = ox + x_pos_mm
+    # Em coordenadas de imagem: Y cresce para baixo.
+    # Y+ (acima) = oy - y_pos_mm; Y- (abaixo) = oy + y_neg_mm
+    y_min = oy - y_pos_mm
+    y_max = oy + y_neg_mm
+
+    clamped_x = max(x_min, min(cx, x_max))
+    clamped_y = max(y_min, min(cy, y_max))
+
+    return (clamped_x, clamped_y)
+
+
 import numpy as np
 import cv2
 

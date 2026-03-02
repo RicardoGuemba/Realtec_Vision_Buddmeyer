@@ -1,5 +1,5 @@
 log_level: INFO
-log_file: logs/buddmeyer_vision.log
+log_file: logs/realtec_vision_buddmeyer.log
 streaming:
   source_type: usb
   usb_camera_index: 0
@@ -15,12 +15,18 @@ detection:
   default_model: PekingU/rtdetr_r50vd
   confidence_threshold: 0.13
   max_detections: 10
-  inference_fps: 15
+  inference_fps: 10
   device: auto
 preprocess:
   profile: default
   brightness: 0.0
   contrast: 0.0
+  confinement:
+    enabled: true
+    x_positive_mm: 20.0
+    x_negative_mm: 20.0
+    y_positive_mm: 15.0
+    y_negative_mm: 10.0
   mm_per_pixel: 1.0
 cip:
   ip: 187.99.124.229

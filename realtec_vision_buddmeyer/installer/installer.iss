@@ -2,14 +2,14 @@
 ; Compile usando Inno Setup Compiler
 
 [Setup]
-AppName=Buddmeyer Vision System
+AppName=Realtec Vision Buddmeyer
 AppVersion=2.0.0
-AppPublisher=Buddmeyer Automation
-AppPublisherURL=https://www.buddmeyer.com
-DefaultDirName={userpf}\BuddmeyerVision
-DefaultGroupName=Buddmeyer Vision System
+AppPublisher=Realtec
+AppPublisherURL=
+DefaultDirName={userpf}\RealtecVisionBuddmeyer
+DefaultGroupName=Realtec Vision Buddmeyer
 OutputDir=dist
-OutputBaseFilename=BuddmeyerVisionInstaller
+OutputBaseFilename=RealtecVisionBuddmeyerInstaller
 Compression=lzma
 SolidCompression=yes
 SetupIconFile=
@@ -31,10 +31,10 @@ Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createalls
 Source: "install.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Buddmeyer Vision System"; Filename: "{app}\Iniciar_Buddmeyer_Vision.bat"; WorkingDir: "{app}"
+Name: "{group}\Realtec Vision Buddmeyer"; Filename: "{app}\Iniciar_Realtec_Vision_Buddmeyer.bat"; WorkingDir: "{app}"
 Name: "{group}\Desinstalar"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Buddmeyer Vision System"; Filename: "{app}\Iniciar_Buddmeyer_Vision.bat"; Tasks: desktopicon; WorkingDir: "{app}"
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\Buddmeyer Vision System"; Filename: "{app}\Iniciar_Buddmeyer_Vision.bat"; Tasks: quicklaunchicon; WorkingDir: "{app}"
+Name: "{autodesktop}\Realtec Vision Buddmeyer"; Filename: "{app}\Iniciar_Realtec_Vision_Buddmeyer.bat"; Tasks: desktopicon; WorkingDir: "{app}"
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\Realtec Vision Buddmeyer"; Filename: "{app}\Iniciar_Realtec_Vision_Buddmeyer.bat"; Tasks: quicklaunchicon; WorkingDir: "{app}"
 
 [Run]
 Filename: "{app}\installer\install.py"; Description: "Executar instalação"; Flags: nowait postinstall skipifsilent; StatusMsg: "Instalando dependências..."

@@ -162,7 +162,7 @@ class _MjpegHandler(BaseHTTPRequestHandler):
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Buddmeyer Vision - Stream</title>
+  <title>Realtec Vision Buddmeyer - Stream</title>
   <style>
     * {{ box-sizing: border-box; }}
     body {{ font-family: 'Segoe UI', sans-serif; margin: 20px; background: #1a1a2e; color: #e0e0e0; }}
@@ -176,7 +176,7 @@ class _MjpegHandler(BaseHTTPRequestHandler):
   </style>
 </head>
 <body>
-  <h1>Buddmeyer Vision - Stream em Tempo Real</h1>
+  <h1>Realtec Vision Buddmeyer - Stream em Tempo Real</h1>
   <div class="ctrl">
     <input type="text" id="url" value="{default_url}" placeholder="http://IP:porta/stream">
     <button onclick="connect()">Conectar</button>

@@ -88,7 +88,7 @@ def build_installer():
     # Comando PyInstaller
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=BuddmeyerVisionInstallerCompleto",
+        "--name=RealtecVisionBuddmeyerInstallerCompleto",
         "--onefile",
         "--console",  # Com console para ver progresso
         "--clean",
@@ -121,7 +121,7 @@ def build_installer():
         print("\n" + "=" * 70)
         print("[OK] INSTALADOR CRIADO COM SUCESSO!")
         print("=" * 70)
-        print(f"\nArquivo: {installer_dir / 'dist' / 'BuddmeyerVisionInstallerCompleto.exe'}")
+        print(f"\nArquivo: {installer_dir / 'dist' / 'RealtecVisionBuddmeyerInstallerCompleto.exe'}")
         print(f"Tamanho aproximado: ~50-100 MB")
         print("\nO instalador inclui:")
         print("  - Todas as dependências Python")

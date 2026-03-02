@@ -1,4 +1,4 @@
-# PRD – BUDDMEYER VISION SYSTEM v2.0 (Windows + PySide6)
+# PRD – Realtec Vision Buddmeyer v2.0 (Windows + PySide6)
 
 **Versão:** 2.0.0  
 **Data:** Janeiro 2025  
@@ -201,10 +201,7 @@ realtec_vision_buddmeyer/
 │   └── stream_health.py              # Health check do stream
 ├── preprocessing/
 │   ├── __init__.py
-│   ├── preprocess_pipeline.py        # Pipeline de pré-processamento
-│   ├── roi_manager.py                # Gerenciamento de ROI
-│   ├── transforms.py                 # Transformações de imagem
-│   └── preprocess_config.py          # Configurações
+│   └── transforms.py                 # Transformações (pixel_to_mm, confinamento ROI)
 ├── detection/
 │   ├── __init__.py
 │   ├── inference_engine.py           # Engine de inferência DETR/RT-DETR
@@ -1086,7 +1083,7 @@ from ui.pages.diagnostics_page import DiagnosticsPage
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Buddmeyer Vision System v2.0")
+        self.setWindowTitle("Realtec Vision Buddmeyer v2.0")
         self.setMinimumSize(1280, 720)
         
         # Tabs

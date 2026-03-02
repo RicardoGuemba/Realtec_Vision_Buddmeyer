@@ -1,4 +1,4 @@
-# Instalador Completo - Buddmeyer Vision System v2.0
+# Instalador Completo - Realtec Vision Buddmeyer v2.0
 
 ## Descrição
 
@@ -38,12 +38,12 @@ Este instalador completo instala automaticamente:
 
 3. **Aguarde a conclusão:**
    - O processo pode levar 5-15 minutos
-   - O arquivo será criado em `dist/BuddmeyerVisionInstallerCompleto.exe`
+   - O arquivo será criado em `dist/RealtecVisionBuddmeyerInstallerCompleto.exe`
 
 ## Como Usar o Instalador
 
 1. **Execute o arquivo .exe:**
-   - Dê duplo clique em `BuddmeyerVisionInstallerCompleto.exe`
+   - Dê duplo clique em `RealtecVisionBuddmeyerInstallerCompleto.exe`
 
 2. **Siga as instruções:**
    - O instalador verificará Python
@@ -53,15 +53,15 @@ Este instalador completo instala automaticamente:
    - Criará scripts de inicialização
 
 3. **Inicie o sistema:**
-   - Navegue até o diretório de instalação (padrão: `C:\Users\<Usuario>\BuddmeyerVision`)
-   - Dê duplo clique em `Iniciar_Buddmeyer_Vision.bat`
+   - Navegue até o diretório de instalação (padrão: `C:\Users\<Usuario>\RealtecVisionBuddmeyer`)
+   - Dê duplo clique em `Iniciar_Realtec_Vision_Buddmeyer.bat`
 
 ## Estrutura do Instalador
 
 O instalador inclui:
 
 ```
-BuddmeyerVisionInstallerCompleto.exe
+RealtecVisionBuddmeyerInstallerCompleto.exe
 ├── install_complete.py (script de instalação)
 ├── realtec_vision_buddmeyer/ (código fonte)
 │   ├── models/ (modelos de detecção)
@@ -71,7 +71,7 @@ BuddmeyerVisionInstallerCompleto.exe
 
 ## Diretório de Instalação Padrão
 
-- **Windows:** `C:\Users\<Usuario>\BuddmeyerVision`
+- **Windows:** `C:\Users\<Usuario>\RealtecVisionBuddmeyer`
 - Pode ser alterado passando o caminho como argumento
 
 ## Dependências Instaladas
@@ -131,7 +131,7 @@ O instalador verifica automaticamente:
 
 Para distribuir o sistema:
 1. Crie o instalador usando `build_complete_installer.py`
-2. Envie apenas o arquivo `BuddmeyerVisionInstallerCompleto.exe`
+2. Envie apenas o arquivo `RealtecVisionBuddmeyerInstallerCompleto.exe`
 3. O usuário executa o .exe e tudo é instalado automaticamente
 
 ## Notas

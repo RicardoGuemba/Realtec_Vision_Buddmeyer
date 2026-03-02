@@ -45,7 +45,7 @@ class DetectionSettings(BaseModel):
     confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Threshold de confiança")
     max_detections: int = Field(default=10, ge=1, description="Máximo de detecções")
     target_classes: Optional[List[str]] = Field(default=None, description="Classes alvo (null = todas)")
-    inference_fps: int = Field(default=15, ge=1, description="FPS de inferência")
+    inference_fps: int = Field(default=10, ge=1, description="FPS de inferência")
     device: str = Field(default="auto", description="Device: cpu, cuda, auto")
     
     @field_validator("device")
@@ -57,6 +57,25 @@ class DetectionSettings(BaseModel):
         return v
 
 
+class ConfinementROISettings(BaseModel):
+    """
+    ROI de confinamento de coordenadas do centroide.
+
+    Definida a partir do centro da imagem usando notação de plano cartesiano:
+    X+ (mm para direita), X- (mm para esquerda),
+    Y+ (mm para cima), Y- (mm para baixo).
+
+    Centroides fora desta área são projetados para o ponto mais próximo dentro.
+    Isso evita que a placa de ventosas colida com as paredes do contêiner.
+    """
+
+    enabled: bool = Field(default=False, description="Habilitar confinamento de centroide")
+    x_positive_mm: float = Field(default=200.0, ge=0.0, description="Limite X positivo (mm à direita do centro)")
+    x_negative_mm: float = Field(default=200.0, ge=0.0, description="Limite X negativo (mm à esquerda do centro)")
+    y_positive_mm: float = Field(default=150.0, ge=0.0, description="Limite Y positivo (mm acima do centro)")
+    y_negative_mm: float = Field(default=150.0, ge=0.0, description="Limite Y negativo (mm abaixo do centro)")
+
+
 class PreprocessSettings(BaseModel):
     """Configurações de pré-processamento."""
 
@@ -64,6 +83,10 @@ class PreprocessSettings(BaseModel):
     brightness: float = Field(default=0.0, ge=-1.0, le=1.0, description="Ajuste de brilho")
     contrast: float = Field(default=0.0, ge=-1.0, le=1.0, description="Ajuste de contraste")
     roi: Optional[List[int]] = Field(default=None, description="ROI [x, y, width, height]")
+    confinement: ConfinementROISettings = Field(
+        default_factory=ConfinementROISettings,
+        description="ROI de confinamento do centroide (limita coordenadas enviadas ao CLP)",
+    )
     mm_per_pixel: float = Field(
         default=1.0,
         ge=0.001,
@@ -178,7 +201,7 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = Field(default="INFO", description="Nível de log")
-    log_file: Optional[str] = Field(default="logs/buddmeyer_vision.log", description="Arquivo de log")
+    log_file: Optional[str] = Field(default="logs/realtec_vision_buddmeyer.log", description="Arquivo de log")
     
     # Subconfigurations
     streaming: StreamingSettings = Field(default_factory=StreamingSettings)

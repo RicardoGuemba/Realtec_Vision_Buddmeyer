@@ -1,4 +1,4 @@
-# Roteiro para o Cliente – Buddmeyer Vision v2.0
+# Roteiro para o Cliente – Realtec Vision Buddmeyer v2.0
 
 Este documento orienta o uso da aplicação no ambiente do cliente: configuração do CLP, onde ver os logs e como proceder em caso de problemas.
 
@@ -6,7 +6,7 @@ Este documento orienta o uso da aplicação no ambiente do cliente: configuraç�
 
 ## 1. Como iniciar a aplicação
 
-- **Pelo atalho:** use o ícone/atalho que abre o Buddmeyer Vision (por exemplo, `Iniciar_Buddmeyer_Vision.bat` na pasta do projeto).
+- **Pelo atalho:** use o ícone/atalho que abre o Realtec Vision Buddmeyer (por exemplo, `Iniciar_Realtec_Vision_Buddmeyer.bat` na pasta do projeto).
 - **Pelo terminal:** na pasta do projeto (ex.: `C:\Realtec_Vision_Buddmeyer`), execute:
   ```bat
   venv\Scripts\activate
@@ -34,8 +34,8 @@ O IP do CLP é usado **no momento em que a aplicação conecta** ao CLP. Por iss
 
 Os logs ajudam a conferir qual IP foi salvo, qual IP foi usado na conexão e se houve erro ao enviar tag.
 
-- **Arquivo de log:** na pasta da aplicação, subpasta `logs`, arquivo `buddmeyer_vision.log`  
-  (caminho típico: `realtec_vision_buddmeyer\logs\buddmeyer_vision.log`).
+- **Arquivo de log:** na pasta da aplicação, subpasta `logs`, arquivo `realtec_vision_buddmeyer.log`  
+  (caminho típico: `realtec_vision_buddmeyer\logs\realtec_vision_buddmeyer.log`).
 - **Na interface:** na aba **Diagnósticos** há visualização de logs e métricas.
 
 O que procurar no log:
@@ -57,7 +57,7 @@ Assim você pode confirmar: (1) qual IP foi salvo (`config_saved`), (2) qual IP 
 Se a aplicação indica que está conectada ao CLP mas aparece erro ao enviar alguma tag:
 
 1. **Anote a mensagem completa** que aparece na tela (ex.: no console de eventos, em vermelho, “Erro CIP: …”).
-2. **Abra o arquivo de log** `logs\buddmeyer_vision.log` e procure por `cip_error`. Lá estarão o IP, a porta e o nome da tag que falharam.
+2. **Abra o arquivo de log** `logs\realtec_vision_buddmeyer.log` e procure por `cip_error`. Lá estarão o IP, a porta e o nome da tag que falharam.
 3. **No CLP (Sysmac Studio):** confira se existe uma **variável global** com o **mesmo nome** que a aplicação está usando (ex.: `VisionCtrl_VisionReady`, `PRODUCT_DETECTED`, `CENTROID_X`). O nome no projeto do CLP deve ser **igual** ao configurado na aplicação.
 4. Verifique também se essas variáveis estão **publicadas para EtherNet/IP** (configuração de variáveis de rede no Sysmac Studio).
 
@@ -98,7 +98,7 @@ E no meio do log deve aparecer `cip_connecting` com o mesmo IP que está no arqu
 | Ação                    | O que fazer |
 |-------------------------|-------------|
 | Alterar IP do CLP       | Configuração → IP do CLP → **Salvar** → depois conectar/iniciar operação. |
-| Ver qual IP foi usado   | Abrir `logs\buddmeyer_vision.log` e procurar `cip_connecting`. |
+| Ver qual IP foi usado   | Abrir `logs\realtec_vision_buddmeyer.log` e procurar `cip_connecting`. |
 | Ver erro ao enviar tag   | Ver mensagem na tela e no log (`cip_error`); conferir nome da tag no CLP (Sysmac). |
 | Testar leitura do IP    | Executar `python realtec_vision_buddmeyer\scripts\test_cip_config_reload.py`. |
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Módulo de detecção do sistema Buddmeyer Vision v2.0
+Módulo de detecção do sistema Realtec Vision Buddmeyer v2.0
 """
 
 from .inference_engine import InferenceEngine

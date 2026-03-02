@@ -1,4 +1,4 @@
-# Buddmeyer Vision System v2.0
+# Realtec Vision Buddmeyer v2.0
 
 Sistema de visão computacional para automação de expedição (pick-and-place) de embalagens.
 
@@ -87,19 +87,18 @@ realtec_vision_buddmeyer/
 │   ├── settings.py            # Pydantic Settings
 │   └── config.yaml            # Configuração YAML
 ├── core/
-│   ├── application.py         # Classe principal singleton
 │   ├── logger.py              # Sistema de logging
 │   ├── metrics.py             # Coleta de métricas
-│   └── exceptions.py          # Exceções customizadas
+│   ├── exceptions.py          # Exceções customizadas
+│   ├── async_utils.py         # safe_create_task (Qt + asyncio)
+│   └── windows_startup.py     # Auto-início com o Windows
 ├── streaming/
 │   ├── stream_manager.py      # Gerenciador de stream
 │   ├── source_adapters.py     # Adaptadores de fonte
 │   ├── frame_buffer.py        # Buffer de frames
 │   └── stream_health.py       # Health check
 ├── preprocessing/
-│   ├── preprocess_pipeline.py # Pipeline de pré-processamento
-│   ├── roi_manager.py         # Gerenciamento de ROI
-│   └── transforms.py          # Transformações de imagem
+│   └── transforms.py          # Transformações (pixel_to_mm, confinamento ROI)
 ├── detection/
 │   ├── inference_engine.py    # Engine de inferência
 │   ├── model_loader.py        # Carregador de modelos
@@ -110,8 +109,7 @@ realtec_vision_buddmeyer/
 │   ├── tag_map.py             # Mapeamento de TAGs
 │   └── connection_state.py    # Estado da conexão
 ├── control/
-│   ├── robot_controller.py    # Máquina de estados do robô
-│   └── cycle_processor.py     # Processador de ciclos
+│   └── robot_controller.py    # Máquina de estados do robô
 ├── ui/
 │   ├── main_window.py         # Janela principal
 │   ├── pages/

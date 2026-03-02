@@ -13,11 +13,12 @@ from PySide6.QtCore import QObject, Signal, QTimer
 
 from config import get_settings
 from core.logger import get_logger
+from core.async_utils import safe_create_task
 from core.metrics import MetricsCollector
 from core.exceptions import RobotControlError, StateTransitionError
 from communication import CIPClient
 from detection.events import DetectionEvent
-from preprocessing.transforms import pixel_to_mm
+from preprocessing.transforms import pixel_to_mm, clamp_centroid_to_confinement
 
 logger = get_logger("control.robot")
 
@@ -191,9 +192,6 @@ class RobotController(QObject):
         # Modo de ciclo: "manual" (aguarda botão) ou "continuous" (auto)
         self._cycle_mode: str = "manual"
         
-        # Autorização do usuário para próximo ciclo (modo manual)
-        self._user_cycle_authorized: bool = False
-        
         # Autorização do usuário para enviar coordenadas ao CLP (modo manual, após detecção)
         self._user_send_authorized: bool = False
         
@@ -202,6 +200,10 @@ class RobotController(QObject):
         
         # Flag para controlar execução única de cleanup no READY_FOR_NEXT
         self._ready_cleanup_done: bool = False
+        
+        # Limite de tentativas de recuperação a partir de ERROR (evita loop infinito)
+        self._recovery_attempts = 0
+        self._max_recovery_attempts = 3
     
     def set_cycle_mode(self, mode: str) -> None:
         """
@@ -215,11 +217,6 @@ class RobotController(QObject):
             return
         self._cycle_mode = mode
         logger.info("cycle_mode_changed", mode=mode)
-    
-    def authorize_next_cycle(self) -> None:
-        """Autoriza o próximo ciclo (usado em modo manual)."""
-        self._user_cycle_authorized = True
-        logger.info("next_cycle_authorized_by_user")
     
     def authorize_send_to_plc(self) -> None:
         """Autoriza o envio das coordenadas ao CLP após detecção (modo manual)."""
@@ -269,7 +266,7 @@ class RobotController(QObject):
         return True
     
     def stop(self) -> None:
-        """Para o controlador."""
+        """Para o controlador. Limpa estado para próxima partida limpa."""
         self._is_running = False
         
         if self._poll_timer is not None:
@@ -278,6 +275,10 @@ class RobotController(QObject):
             self._poll_timer = None
         
         self._transition_to(RobotControlState.STOPPED)
+        self._current_detection = None
+        self._cycle_steps.clear()
+        self._recovery_attempts = 0
+        self._user_send_authorized = False
         logger.info("robot_controller_stopped")
     
     def reset(self) -> None:
@@ -333,8 +334,8 @@ class RobotController(QObject):
         if self._processing:
             return
         
-        # Executa lógica do estado atual
-        asyncio.create_task(self._process_current_state())
+        # Executa lógica do estado atual (safe para shutdown)
+        safe_create_task(self._process_current_state(), "robot_process_state")
     
     async def _process_current_state(self) -> None:
         """Processa o estado atual (serializado via _processing flag)."""
@@ -456,11 +457,32 @@ class RobotController(QObject):
                 return
             
             plc_data = self._current_detection.to_plc_data()
-            mm_per_px = get_settings().preprocess.mm_per_pixel
+            settings = get_settings()
+            mm_per_px = settings.preprocess.mm_per_pixel
             centroid_x, centroid_y = pixel_to_mm(
                 (plc_data["centroid_x"], plc_data["centroid_y"]), mm_per_px
             )
-            
+
+            # Confinamento de centroide
+            conf = settings.preprocess.confinement
+            if conf.enabled:
+                from streaming import StreamManager
+                fi = StreamManager().get_current_frame_info()
+                if fi is not None:
+                    img_center_mm = pixel_to_mm(
+                        (fi.width / 2.0, fi.height / 2.0), mm_per_px
+                    )
+                else:
+                    img_center_mm = pixel_to_mm((320.0, 240.0), mm_per_px)
+                centroid_x, centroid_y = clamp_centroid_to_confinement(
+                    centroid_mm=(centroid_x, centroid_y),
+                    image_center_mm=img_center_mm,
+                    x_pos_mm=conf.x_positive_mm,
+                    x_neg_mm=conf.x_negative_mm,
+                    y_pos_mm=conf.y_positive_mm,
+                    y_neg_mm=conf.y_negative_mm,
+                )
+
             await self._cip_client.write_detection_result(
                 detected=plc_data["product_detected"],
                 centroid_x=centroid_x,
@@ -590,22 +612,24 @@ class RobotController(QObject):
         """
         Prepara para próximo ciclo.
         
-        Em modo contínuo: avança automaticamente.
-        Em modo manual: aguarda authorize_next_cycle() do usuário.
+        Avança automaticamente para WAITING_AUTHORIZATION (modo manual e contínuo).
+        Em modo manual, a autorização ocorre após detecção (Autorizar envio ao CLP).
         """
-        if self._cycle_mode == "continuous":
-            self._transition_to(RobotControlState.WAITING_AUTHORIZATION)
-        elif self._user_cycle_authorized:
-            self._user_cycle_authorized = False
-            self._transition_to(RobotControlState.WAITING_AUTHORIZATION)
-        # else: permanece em READY_FOR_NEXT aguardando autorização do usuário
+        self._transition_to(RobotControlState.WAITING_AUTHORIZATION)
     
     async def _handle_error(self) -> None:
-        """Estado de erro."""
-        # Tenta recuperar após alguns segundos
+        """Estado de erro. Recuperação limitada para evitar loop infinito (supervisório)."""
         elapsed = (datetime.now() - self._state_enter_time).total_seconds()
         if elapsed > 5.0:
-            logger.info("attempting_recovery_from_error")
+            if self._recovery_attempts >= self._max_recovery_attempts:
+                logger.warning(
+                    "recovery_attempts_exhausted",
+                    attempts=self._recovery_attempts,
+                    msg="Aguardando intervenção do operador (reset ou reinício).",
+                )
+                return
+            self._recovery_attempts += 1
+            logger.info("attempting_recovery_from_error", attempt=self._recovery_attempts)
             self._transition_to(RobotControlState.INITIALIZING)
     
     async def _handle_timeout(self) -> None:
@@ -658,6 +682,12 @@ class RobotController(QObject):
         self._state = new_state
         self._state_enter_time = datetime.now()
         
+        # Reset de recovery_attempts: ao iniciar limpo (STOPPED→INIT) ou ao recuperar com sucesso (INIT→WAITING_AUTHORIZATION)
+        if new_state == RobotControlState.INITIALIZING and old_state != RobotControlState.ERROR:
+            self._recovery_attempts = 0
+        if new_state == RobotControlState.WAITING_AUTHORIZATION and old_state == RobotControlState.INITIALIZING:
+            self._recovery_attempts = 0
+        
         logger.info(
             "state_transition",
             from_state=old_state.value,
@@ -674,7 +704,18 @@ class RobotController(QObject):
         self._transition_to(RobotControlState.ERROR)
     
     def get_status(self) -> Dict[str, Any]:
-        """Retorna status do controlador."""
+        """Retorna status do controlador (dict serializável para log/API)."""
+        current_detection_safe: Optional[Dict[str, Any]] = None
+        if self._current_detection is not None:
+            try:
+                current_detection_safe = {
+                    "detected": self._current_detection.detected,
+                    "class_name": self._current_detection.class_name,
+                    "confidence": self._current_detection.confidence,
+                    "centroid": list(self._current_detection.centroid),
+                }
+            except Exception:
+                current_detection_safe = {"error": "serialization_failed"}
         return {
             "state": self._state.value,
             "previous_state": self._previous_state.value,
@@ -682,7 +723,8 @@ class RobotController(QObject):
             "cycle_count": self._cycle_count,
             "last_error": self._last_error,
             "state_duration": (datetime.now() - self._state_enter_time).total_seconds(),
-            "current_detection": self._current_detection.to_dict() if self._current_detection else None,
+            "current_detection": current_detection_safe,
+            "recovery_attempts": self._recovery_attempts,
         }
     
     @property

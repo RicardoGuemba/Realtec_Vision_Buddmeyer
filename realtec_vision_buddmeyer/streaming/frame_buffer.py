@@ -1,6 +1,38 @@
 # -*- coding: utf-8 -*-
 """
 Buffer de frames thread-safe para streaming de vídeo.
+
+## Como funciona o buffer
+
+O **FrameBuffer** é um buffer circular (deque) que armazena os frames capturados pela câmera
+antes de serem consumidos pela inferência e pela UI.
+
+### Fluxo
+
+1. **Produção:** O StreamWorker captura frames da câmera e emite `frame_captured`.
+2. **Enfileiramento:** O StreamManager recebe o sinal e chama `_buffer.put(frame_info)`.
+3. **Consumo:** A inferência e a UI recebem frames via `frame_info_available` (emitido
+   imediatamente após o put). O buffer não é usado em modo FIFO no fluxo atual — o
+   StreamManager emite o frame mais recente diretamente; o buffer serve como histórico
+   e para métricas.
+
+### Características
+
+- **Tamanho máximo:** Configurável via `config.yaml` → `streaming.max_frame_buffer_size` (padrão: 30).
+- **Comportamento:** Quando cheio, o frame mais antigo é descartado automaticamente (deque com maxlen).
+- **Thread-safe:** Lock protege operações concorrentes (captura vs. leitura).
+- **Event:** `_new_frame_event` permite que consumidores aguardem um novo frame (útil para `get(timeout=X)`).
+- **Estatísticas:** `frame_count`, `dropped_count`, `usage_percent` para diagnóstico.
+
+### Relação com FPS
+
+- **Stream (câmera):** A câmera captura a sua taxa nativa (ex.: 30 FPS). O StreamWorker limita
+  via `sleep` para atingir `target_fps` da fonte.
+- **Inferência:** Limitada por `detection.inference_fps` (padrão: 10). Se a câmera produz 30 FPS
+  e a inferência processa 10 FPS, frames são descartados (sempre processa o mais recente).
+- **Buffer:** Amortece picos: se a inferência travar por um instante, os frames continuam
+  chegando ao buffer. O buffer evita bloqueio do produtor; frames antigos são descartados
+  quando o buffer enche.
 """
 
 from collections import deque

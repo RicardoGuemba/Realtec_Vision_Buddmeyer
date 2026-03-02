@@ -1,2 +1,2 @@
 # -*- coding: utf-8 -*-
-"""Testes do Buddmeyer Vision System."""
+"""Testes do Realtec Vision Buddmeyer."""

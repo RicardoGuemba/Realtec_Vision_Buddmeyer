@@ -296,12 +296,10 @@ class TagMap:
     def _load_custom_mappings(self) -> None:
         """Carrega mapeamentos customizados da configuração."""
         tags_settings = self._settings.tags
-        
-        for field_name in dir(tags_settings):
-            if not field_name.startswith("_"):
-                value = getattr(tags_settings, field_name)
-                if isinstance(value, str) and value:
-                    self._custom_mappings[field_name] = value
+        # Usa model_dump() para evitar depreciação Pydantic v2.11 (model_fields em instância)
+        for field_name, value in tags_settings.model_dump().items():
+            if isinstance(value, str) and value:
+                self._custom_mappings[field_name] = value
     
     def get_plc_name(self, logical_name: str) -> str:
         """

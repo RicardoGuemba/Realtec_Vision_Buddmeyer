@@ -24,7 +24,7 @@ def build_installer():
     # Comando PyInstaller
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=BuddmeyerVisionInstaller",
+        "--name=RealtecVisionBuddmeyerInstaller",
         "--onefile",
         "--console",  # Com console para ver progresso
         "--clean",
@@ -41,7 +41,7 @@ def build_installer():
     try:
         subprocess.run(cmd, check=True)
         print("\n[OK] Instalador criado com sucesso!")
-        print("Arquivo: dist/BuddmeyerVisionInstaller.exe")
+        print("Arquivo: dist/RealtecVisionBuddmeyerInstaller.exe")
     except subprocess.CalledProcessError as e:
         print(f"\n[ERRO] Erro ao criar instalador: {e}")
         return 1

@@ -4,7 +4,7 @@
 import pytest
 import numpy as np
 
-from preprocessing.transforms import pixel_to_mm, ImageTransforms
+from preprocessing.transforms import pixel_to_mm, clamp_centroid_to_confinement, ImageTransforms
 
 
 class TestPixelToMm:
@@ -25,6 +25,92 @@ class TestPixelToMm:
     def test_negative_mm_per_pixel_returns_unchanged(self):
         out = pixel_to_mm((10.0, 20.0), -0.5)
         assert out == (10.0, 20.0)
+
+
+class TestClampCentroidToConfinement:
+    """Testes para clamp_centroid_to_confinement."""
+
+    def test_inside_unchanged(self):
+        """Centroide dentro da ROI permanece inalterado."""
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(320.0, 240.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=200.0, x_neg_mm=200.0,
+            y_pos_mm=150.0, y_neg_mm=150.0,
+        )
+        assert result == (320.0, 240.0)
+
+    def test_outside_right_clamped(self):
+        """Centroide à direita é projetado para o limite X+."""
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(600.0, 240.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=100.0, x_neg_mm=100.0,
+            y_pos_mm=100.0, y_neg_mm=100.0,
+        )
+        assert result[0] == pytest.approx(420.0)
+        assert result[1] == pytest.approx(240.0)
+
+    def test_outside_left_clamped(self):
+        """Centroide à esquerda é projetado para o limite X-."""
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(50.0, 240.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=100.0, x_neg_mm=100.0,
+            y_pos_mm=100.0, y_neg_mm=100.0,
+        )
+        assert result[0] == pytest.approx(220.0)
+
+    def test_outside_top_clamped(self):
+        """Centroide acima (valor Y menor) é projetado para o limite Y+."""
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(320.0, 10.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=200.0, x_neg_mm=200.0,
+            y_pos_mm=150.0, y_neg_mm=150.0,
+        )
+        assert result[1] == pytest.approx(90.0)
+
+    def test_outside_bottom_clamped(self):
+        """Centroide abaixo (valor Y maior) é projetado para o limite Y-."""
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(320.0, 500.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=200.0, x_neg_mm=200.0,
+            y_pos_mm=150.0, y_neg_mm=150.0,
+        )
+        assert result[1] == pytest.approx(390.0)
+
+    def test_corner_clamped(self):
+        """Centroide no canto é projetado para o canto da ROI."""
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(999.0, 999.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=100.0, x_neg_mm=100.0,
+            y_pos_mm=80.0, y_neg_mm=80.0,
+        )
+        assert result[0] == pytest.approx(420.0)
+        assert result[1] == pytest.approx(320.0)
+
+    def test_asymmetric_limits(self):
+        """Limites assimétricos (X-=50, X+=300) funcionam corretamente."""
+        cx = 320.0 + 400.0  # 720.0 — fora de X+
+        result = clamp_centroid_to_confinement(
+            centroid_mm=(cx, 240.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=300.0, x_neg_mm=50.0,
+            y_pos_mm=100.0, y_neg_mm=100.0,
+        )
+        assert result[0] == pytest.approx(620.0)
+
+        cx_left = 320.0 - 100.0  # 220.0 — fora de X- (=50)
+        result2 = clamp_centroid_to_confinement(
+            centroid_mm=(cx_left, 240.0),
+            image_center_mm=(320.0, 240.0),
+            x_pos_mm=300.0, x_neg_mm=50.0,
+            y_pos_mm=100.0, y_neg_mm=100.0,
+        )
+        assert result2[0] == pytest.approx(270.0)
 
 
 class TestImageTransforms:

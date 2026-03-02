@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Exceções customizadas do sistema Buddmeyer Vision v2.0
+Exceções customizadas do sistema Realtec Vision Buddmeyer v2.0
 """
 
 

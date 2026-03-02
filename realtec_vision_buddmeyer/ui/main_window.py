@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Janela principal do sistema Buddmeyer Vision v2.0.
+Janela principal do sistema Realtec Vision Buddmeyer v2.0.
 """
 
 import sys
@@ -23,7 +23,7 @@ logger = get_logger("ui.main")
 
 class MainWindow(QMainWindow):
     """
-    Janela principal do sistema Buddmeyer Vision v2.0.
+    Janela principal do sistema Realtec Vision Buddmeyer v2.0.
     
     Contém:
     - Menu bar
@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
     
     def _setup_ui(self) -> None:
         """Configura a interface."""
-        self.setWindowTitle("Buddmeyer Vision System v2.0")
+        self.setWindowTitle("Realtec Vision Buddmeyer v2.1.0")
         self.setMinimumSize(1280, 720)
         
         # Widget central
@@ -136,7 +136,7 @@ class MainWindow(QMainWindow):
         
         exit_action = QAction("Sair", self)
         exit_action.setShortcut(QKeySequence("Ctrl+Q"))
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self._request_exit)
         file_menu.addAction(exit_action)
         
         # Menu Sistema
@@ -454,9 +454,9 @@ class MainWindow(QMainWindow):
         """Mostra diálogo sobre."""
         QMessageBox.about(
             self,
-            "Sobre Buddmeyer Vision System",
+            "Sobre Realtec Vision Buddmeyer",
             """
-            <h2>Buddmeyer Vision System v2.0</h2>
+            <h2>Realtec Vision Buddmeyer v2.1.0</h2>
             <p>Sistema de visão computacional para automação de expedição.</p>
             <p><b>Tecnologias:</b></p>
             <ul>
@@ -470,13 +470,27 @@ class MainWindow(QMainWindow):
             """
         )
     
+    def _request_exit(self) -> None:
+        """Solicita saída, parando todos os processos antes de fechar."""
+        self._force_shutdown()
+        self.close()
+
+    def _force_shutdown(self) -> None:
+        """Para todos os processos (stream, inferência, CLP, robô, MJPEG)."""
+        if self._stream_manager is None:
+            return
+        if hasattr(self, "_operation_page"):
+            try:
+                self._operation_page._stop_system()
+            except Exception as e:
+                logger.warning("shutdown_stop_system_error", error=str(e))
+
     def closeEvent(self, event) -> None:
-        """Evento de fechamento."""
+        """Evento de fechamento — para todos os processos antes de sair."""
         if self._stream_manager is None:
             event.accept()
             logger.info("application_closed")
             return
-        # Para sistema se estiver rodando
         if self._stream_manager.is_running:
             reply = QMessageBox.question(
                 self,
@@ -485,13 +499,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
-            
-            if reply == QMessageBox.Yes:
-                self._operation_page._stop_system()
-                event.accept()
-                logger.info("application_closed")
-            else:
+            if reply != QMessageBox.Yes:
                 event.ignore()
-        else:
-            event.accept()
-            logger.info("application_closed")
+                return
+        self._force_shutdown()
+        event.accept()
+        logger.info("application_closed")

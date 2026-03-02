@@ -1,4 +1,4 @@
-# Buddmeyer Vision System v2.0 — Documentação para o Cliente
+# Realtec Vision Buddmeyer v2.0 — Documentação para o Cliente
 
 **Documento de referência técnico-funcional** — Visão de alto e baixo nível, componentes, variáveis por feature e interface, para compartilhamento com o cliente.
 
@@ -25,7 +25,7 @@
 
 # 1. Como instalar o sistema
 
-Este tópico descreve como instalar o Buddmeyer Vision na máquina do cliente. Há duas opções: usar o instalador automático (.exe) ou instalar manualmente a partir do código-fonte (clone do repositório).
+Este tópico descreve como instalar o Realtec Vision Buddmeyer na máquina do cliente. Há duas opções: usar o instalador automático (.exe) ou instalar manualmente a partir do código-fonte (clone do repositório).
 
 ## 1.1 Requisitos antes de instalar
 
@@ -40,7 +40,7 @@ Este tópico descreve como instalar o Buddmeyer Vision na máquina do cliente. H
 
 ## 1.2 Opção A — Instalador .exe (recomendado para o cliente)
 
-Se você recebeu o arquivo **BuddmeyerVisionInstallerCompleto.exe** (ou similar):
+Se você recebeu o arquivo **RealtecVisionBuddmeyerInstallerCompleto.exe** (ou similar):
 
 1. **Execute o instalador**  
    Dê duplo clique no arquivo `.exe`.
@@ -48,17 +48,17 @@ Se você recebeu o arquivo **BuddmeyerVisionInstallerCompleto.exe** (ou similar)
 2. **Siga as instruções na tela**  
    O instalador irá:
    - Verificar se Python 3.10+ está instalado no sistema
-   - Criar o diretório de instalação (padrão: `C:\Users\<SeuUsuário>\BuddmeyerVision`)
+   - Criar o diretório de instalação (padrão: `C:\Users\<SeuUsuário>\RealtecVisionBuddmeyer`)
    - Copiar os arquivos do projeto
    - Criar um ambiente virtual Python e instalar todas as dependências (PySide6, PyTorch, OpenCV, aphyt, etc.)
-   - Criar o script **Iniciar_Buddmeyer_Vision.bat**
+   - Criar o script **Iniciar_Realtec_Vision_Buddmeyer.bat**
 
 3. **Aguarde a conclusão**  
    A instalação pode levar de 10 a 30 minutos, dependendo da internet (download do PyTorch e demais pacotes).
 
 4. **Inicie o sistema**  
-   - Abra a pasta de instalação (ex.: `C:\Users\<SeuUsuário>\BuddmeyerVision`)
-   - Dê duplo clique em **Iniciar_Buddmeyer_Vision.bat**
+   - Abra a pasta de instalação (ex.: `C:\Users\<SeuUsuário>\RealtecVisionBuddmeyer`)
+   - Dê duplo clique em **Iniciar_Realtec_Vision_Buddmeyer.bat**
 
 **Requisitos:** Python 3.10+ instalado e marcado “Add Python to PATH” durante a instalação do Python; conexão com internet; privilégios suficientes para criar pasta e instalar pacotes.
 
@@ -116,7 +116,7 @@ Após a instalação:
 
 ## 2.1 Objetivo do sistema
 
-O **Buddmeyer Vision System** é um sistema supervisório para automação industrial do tipo **pick-and-place**:
+O **Realtec Vision Buddmeyer** é um sistema supervisório para automação industrial do tipo **pick-and-place**:
 
 - **Entrada:** câmeras industriais (USB ou GigE) capturam a cena.
 - **Processamento:** modelo de visão (RT-DETR) detecta embalagens em tempo real e calcula a posição do centroide.
@@ -364,7 +364,7 @@ Esta seção serve de referência para suporte e evolução do sistema (equipe t
 
 ## 6.1 Janela principal
 
-- **Título:** Buddmeyer Vision System v2.0  
+- **Título:** Realtec Vision Buddmeyer v2.0  
 - **Tamanho mínimo:** 1280×720  
 - **Menus:** Arquivo (Salvar configurações, Sair), Sistema (Iniciar, Parar, Recarregar modelo), Ajuda (Sobre)  
 - **Barra de status:** Estado do sistema (Rodando/Parado), FPS, estado do CLP (Conectado/Simulado/Desconectado), data/hora  
@@ -377,13 +377,13 @@ Esta seção serve de referência para suporte e evolução do sistema (equipe t
 - **Painel lateral:** Status do sistema, stream, inferência, CLP, robô; última detecção; contadores (detecções, ciclos, erros)  
 - **Console de eventos:** Log em tempo real de ações e erros  
 - **Barra de status do ciclo:** Mensagem do estado atual do controlador (ex.: “Aguardando detecção”)  
-- **Controles de ciclo:** Checkbox “Modo Contínuo”; botões “Autorizar envio ao CLP” e “Novo Ciclo” (modo manual)  
+- **Controles de ciclo:** Checkbox “Modo Contínuo”; botões “Autorizar envio ao CLP” e “Stop” (modo manual)  
 
 ## 6.3 Aba Configuração
 
 - **Fonte de vídeo:** Tipo (USB/GigE), índice USB, IP/porta GigE, tamanho do buffer  
 - **Modelo RT-DETR:** Modelo, caminho local, device, confiança mínima, máximo de detecções, FPS de inferência  
-- **Pré-processamento:** Calibração mm/px, brilho, contraste, ROI  
+- **Pré-processamento:** Calibração mm/px, brilho, contraste, Confinamento de Centroide (ROI em mm: X-, X+, Y+, Y-)  
 - **Controle (CLP):** IP, porta, timeout, modo simulado, testar conexão, reconexão, heartbeat  
 - **Sistema:** Iniciar automaticamente com o Windows (restabelece após falta de energia)  
 - **Output:** Stream MJPEG (habilitar, porta, FPS)  
@@ -420,8 +420,8 @@ Esta seção serve de referência para suporte e evolução do sistema (equipe t
 1. Com “Modo Contínuo” desmarcado, ao haver detecção o sistema aguarda “Autorizar envio ao CLP”.  
 2. O operador clica em **Autorizar envio ao CLP**.  
 3. As coordenadas são enviadas ao CLP e o ciclo segue (ACK → Pick → Place).  
-4. Ao final do ciclo, o sistema aguarda “Novo Ciclo”.  
-5. O operador clica em **Novo Ciclo** para liberar o próximo ciclo.  
+4. Ao final do ciclo, o sistema aguarda “Stop”.  
+5. Em modo manual, aguarda próxima detecção e "Autorizar envio ao CLP".  
 
 ## UC-04: Visualização remota (stream MJPEG)
 

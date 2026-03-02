@@ -1,5 +1,5 @@
-# Buddmeyer Vision System v2.0 - Script de Inicialização
-# Execute com: PowerShell -ExecutionPolicy Bypass -File "Iniciar_Buddmeyer_Vision.ps1"
+# Realtec Vision Buddmeyer v2.0 - Script de Inicialização
+# Execute com: PowerShell -ExecutionPolicy Bypass -File "Iniciar_Realtec_Vision_Buddmeyer.ps1"
 
 $ErrorActionPreference = "Stop"
 

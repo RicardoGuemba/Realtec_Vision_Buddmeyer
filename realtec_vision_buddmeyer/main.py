@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Buddmeyer Vision System v2.0
+Realtec Vision Buddmeyer v2.0
 Sistema de visão computacional para automação de expedição.
 
 Ponto de entrada principal da aplicação.
@@ -56,13 +56,13 @@ def main() -> int:
     )
     
     logger = get_logger("main")
-    logger.info("application_starting", version="2.0.0")
+    logger.info("application_starting", version="2.1.0")
     
     # Cria aplicação Qt
     app = QApplication(sys.argv)
-    app.setApplicationName("Buddmeyer Vision System")
-    app.setApplicationVersion("2.0.0")
-    app.setOrganizationName("Buddmeyer")
+    app.setApplicationName("Realtec Vision Buddmeyer")
+    app.setApplicationVersion("2.1.0")
+    app.setOrganizationName("Realtec")
     
     # Fonte padrão
     font = QFont("Segoe UI", 10)

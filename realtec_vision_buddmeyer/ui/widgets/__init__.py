@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Widgets customizados para a interface do sistema Buddmeyer Vision v2.0
+Widgets customizados para a interface do sistema Realtec Vision Buddmeyer v2.0
 """
 
 from .video_widget import VideoWidget

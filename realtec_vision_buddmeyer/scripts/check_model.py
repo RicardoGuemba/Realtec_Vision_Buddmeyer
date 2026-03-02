@@ -16,7 +16,7 @@ from config import get_settings
 def main():
     """Verifica o modelo."""
     print("=" * 60)
-    print("VERIFICAÇÃO DE MODELO - Buddmeyer Vision System v2.0")
+    print("VERIFICAÇÃO DE MODELO - Realtec Vision Buddmeyer v2.0")
     print("=" * 60)
     print()
     

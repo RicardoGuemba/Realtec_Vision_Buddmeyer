@@ -1,8 +1,8 @@
-# Documentação Completa — Buddmeyer Vision System v2.0
+# Documentação Completa — Realtec Vision Buddmeyer v2.0
 
 **Visão de alto e baixo nível** — Arquitetura, features, variáveis, classes, funções, diagramas, casos de uso e UI.
 
-> **Documentos relacionados:** `DOCUMENTACAO_PARA_CLIENTE.md` (versão para cliente) | `USO_E_ABAS.md` (guia de uso) | `TAG_CONTRACT.md` (contrato de TAGs CLP).
+> **Documentos relacionados:** `DOCUMENTACAO_PARA_CLIENTE.md` (versão para cliente) | `USO_E_ABAS.md` (guia de uso) | `TAG_CONTRACT.md` (contrato de TAGs CLP) | `GUIA_MANUTENCAO_E_INTEGRACAO.md` (adicionar TAGs, mapa de falha, tutorial robô–supervisório, arquitetura).
 
 ---
 
@@ -85,7 +85,7 @@ Fonte (USB ou GigE)
 | **Inferência** | `detection/inference_engine.py` | `InferenceEngine`, `InferenceWorker`, `process_frame()` |
 | **Pós-processamento** | `detection/postprocess.py` | `PostProcessor.process()`, `_nms()` |
 | **Eventos de detecção** | `detection/events.py` | `DetectionEvent`, `DetectionResult`, `from_result()` |
-| **Calibração mm/px** | `preprocessing/transforms.py` | `pixel_to_mm()` |
+| **Calibração mm/px** | `preprocessing/transforms.py` | `pixel_to_mm()`, `clamp_centroid_to_confinement()` |
 | **Conexão CIP** | `communication/cip_client.py` | `CIPClient`, `connect()`, `write_detection_result()` |
 | **Ciclo robô** | `control/robot_controller.py` | `RobotController`, `process_detection()`, `_transition_to()` |
 | **Stream MJPEG** | `output/mjpeg_stream.py` | `StreamFrameProvider`, `MjpegStreamServer` |
@@ -162,7 +162,7 @@ Fonte (USB ou GigE)
 | `ConfigurationPage._save_settings()` | `ui/pages/configuration_page.py` | Salva config em YAML |
 | `VideoWidget.update_frame()` | `ui/widgets/video_widget.py` | Exibe frame e overlay de detecções |
 | `StatusPanel.set_connection_state()` | `ui/widgets/status_panel.py` | Atualiza status do CLP na UI |
-| `Application._connect_signals()` | `core/application.py` | Conecta sinais entre módulos |
+| `MainWindow` (carregamento diferido) | `ui/main_window.py` | Orquestra páginas e componentes |
 
 ## 2.3 Mapa de Arquivos — Estrutura e Propósito
 
@@ -179,8 +179,8 @@ Fonte (USB ou GigE)
 | `detection/model_loader.py` | Carrega modelo RT-DETR (Hugging Face ou local) |
 | `detection/postprocess.py` | NMS, filtros, geração de centroides |
 | `detection/events.py` | BoundingBox, Detection, DetectionResult, DetectionEvent |
-| `preprocessing/transforms.py` | `pixel_to_mm()`, brilho, contraste |
-| `preprocessing/preprocess_pipeline.py` | Pipeline com ROI e perfis |
+| `preprocessing/transforms.py` | `pixel_to_mm()`, `clamp_centroid_to_confinement()`, brilho, contraste |
+| `preprocessing/transforms.py` | pixel_to_mm, clamp_centroid_to_confinement, ImageTransforms |
 | `communication/cip_client.py` | Cliente CIP; SimulatedPLC para testes |
 | `communication/tag_map.py` | Mapeamento TAGs lógicos → físicos |
 | `control/robot_controller.py` | Máquina de estados pick-and-place |
@@ -191,7 +191,6 @@ Fonte (USB ou GigE)
 | `ui/pages/diagnostics_page.py` | Aba Diagnósticos; métricas; logs |
 | `ui/widgets/video_widget.py` | Widget de vídeo com overlay |
 | `ui/widgets/status_panel.py` | Painel de status lateral |
-| `core/application.py` | Orquestrador (opcional) |
 | `core/logger.py` | Logging estruturado (structlog) |
 | `core/metrics.py` | Coletor de métricas |
 
@@ -204,13 +203,14 @@ Fonte (USB ou GigE)
 | Alterar modelo de detecção | `config/config.yaml` → detection; `detection/model_loader.py` |
 | Alterar threshold de confiança | `config/config.yaml`; `detection/postprocess.py`; UI Config |
 | Alterar IP/porta do CLP | `config/config.yaml`; aba Configuração → Controle (CLP) |
-| Adicionar/renomear TAG | `config/config.yaml` → tags; `communication/tag_map.py` |
+| Adicionar/renomear TAG | Ver **passo a passo** em [GUIA_MANUTENCAO_E_INTEGRACAO.md](GUIA_MANUTENCAO_E_INTEGRACAO.md#1-como-adicionar-tags): `config/settings.py` (TagSettings), `communication/tag_map.py` (DEFINITIONS), uso no código, `TAG_CONTRACT.md` |
 | Alterar fluxo do ciclo robô | `control/robot_controller.py`: estados e `_transition_to()` |
 | Alterar timeouts (ACK, pick, place) | `config/config.yaml` → robot_control |
 | Ajustar calibração mm/px | `config/config.yaml` → preprocess.mm_per_pixel; UI Pré-processamento |
 | Alterar layout da UI | `ui/pages/operation_page.py`; `ui/main_window.py` |
 | Trocar tema/cores | `ui/styles/industrial.qss`; `MainWindow._apply_theme()` |
 | Adicionar nova métrica | `core/metrics.py`; `ui/pages/diagnostics_page.py` |
+| Investigar falha por tipo | Ver **mapa tipo de falha → arquivo** em [GUIA_MANUTENCAO_E_INTEGRACAO.md](GUIA_MANUTENCAO_E_INTEGRACAO.md#2-manutenção-por-falha--mapa-tipo-de-falha-por-arquivo) |
 
 ---
 
@@ -366,8 +366,8 @@ sequenceDiagram
 1. Detecção ocorre → sistema aguarda "Autorizar envio ao CLP"
 2. Operador clica em **Autorizar envio ao CLP**
 3. Coordenadas enviadas ao CLP, ciclo prossegue
-4. Após Place complete → sistema aguarda "Novo Ciclo"
-5. Operador clica em **Novo Ciclo** para liberar próximo
+4. Após Place complete → sistema avança automaticamente para próximo ciclo
+5. Em modo manual: aguarda próxima detecção e "Autorizar envio ao CLP"
 
 ## UC-04: Visualizar Stream Remotamente
 
@@ -528,30 +528,40 @@ sequenceDiagram
 
 ---
 
-## 5.6 core/application.py — Orquestrador
-
-| Item | Descrição |
-|------|-----------|
-| `Application` | Singleton que possui e inicia/para: StreamManager, InferenceEngine, CIPClient, RobotController |
-| `start()` | Carrega modelo, conecta CIP, inicia stream, inferência e controlador; conecta sinais entre módulos |
-| `stop()` | Para stream, inferência, controlador; desconecta CIP |
-
-**Sinais internos:** frame → inferência → robô; detection_event → RobotController; state_changed → UI.
-
-## 5.7 output/mjpeg_stream.py
+## 5.6 output/mjpeg_stream.py
 
 | Classe | Descrição |
 |--------|-----------|
 | `StreamFrameProvider` | Buffer thread-safe de frame+detecções; `update(frame, detections)`, `get_jpeg_bytes()` |
 | `MjpegStreamServer` | HTTPServer em thread; `start()`, `stop()`; rotas: /stream (MJPEG), /, /viewer (HTML), /health |
 
-## 5.8 preprocessing/ — Pipeline e Transformações
+## 5.7 preprocessing/ — Pipeline e Transformações
 
 | Classe/Arquivo | Descrição |
 |----------------|-----------|
-| `PreprocessPipeline` | ROI (ROIManager), brilho/contraste (ImageTransforms); perfis: default, bright, dark, high_contrast |
-| `ROIManager` | Região de interesse (x, y, w, h) |
 | `ImageTransforms` | Brilho, contraste; usa `mm_per_pixel` para conversão pixel→mm |
+| `clamp_centroid_to_confinement()` | Projeta centroides para dentro da ROI de confinamento (evita colisão da placa de ventosas) |
+| `ConfinementROISettings` | Configuração da ROI de confinamento: enabled, x_positive_mm, x_negative_mm, y_positive_mm, y_negative_mm |
+
+### Confinamento de Centroide (ROI)
+
+O confinamento de centroide impede que coordenadas enviadas ao CLP ultrapassem os limites operacionais da placa de ventosas.
+
+**Problema:** A placa de pick contém 8 ventosas e é grande. Se o centroide detectado estiver próximo à parede do contêiner, a placa colidiria com a parede ao tentar realizar o pick.
+
+**Solução:** Uma ROI retangular centrada na imagem da câmera, definida por 4 limites em mm:
+- **X+ (direita):** distância máxima em mm à direita do centro da imagem
+- **X- (esquerda):** distância máxima em mm à esquerda do centro da imagem
+- **Y+ (acima):** distância máxima em mm acima do centro da imagem (valor pixel menor)
+- **Y- (abaixo):** distância máxima em mm abaixo do centro da imagem (valor pixel maior)
+
+**Comportamento:**
+1. O centro da imagem da câmera é calculado automaticamente (largura/2, altura/2) em pixels, convertido para mm pela calibração mm/px.
+2. Os limites X-, X+, Y+, Y- definem um retângulo no plano cartesiano centrado na imagem.
+3. Se o centroide detectado estiver **dentro** da ROI, é enviado sem alteração.
+4. Se estiver **fora**, é projetado (clamped) para o ponto mais próximo dentro da ROI — ou seja, cada eixo é limitado independentemente ao intervalo [centro - limite_negativo, centro + limite_positivo].
+5. A função `clamp_centroid_to_confinement()` implementa esta lógica e é aplicada tanto na `OperationPage._communicate_centroid_to_plc()` quanto no `RobotController._send_data_to_plc()`.
+6. **Visualização:** Na aba Operação, o checkbox **ROI** liga/desliga a exibição do retângulo da área de confinamento sobre a imagem (traço amarelo fino), desenhado pelo `VideoWidget._draw_confinement_roi()`.
 
 ---
 
@@ -561,7 +571,7 @@ sequenceDiagram
 
 | Elemento | Descrição |
 |---------|-----------|
-| **Título** | Buddmeyer Vision System v2.0 |
+| **Título** | Realtec Vision Buddmeyer v2.0 |
 | **Tamanho mínimo** | 1280×720 |
 | **Menu Arquivo** | Salvar Configurações (Ctrl+S), Sair (Ctrl+Q) |
 | **Menu Sistema** | Iniciar (F5), Parar (F6), Recarregar Modelo |
@@ -573,6 +583,8 @@ sequenceDiagram
 ---
 
 ## 6.2 Aba Operação — Layout e Elementos
+
+Para a **lista completa de variáveis da UI** (tipo, localização e significado de cada controle em todas as abas), ver [USO_E_ABAS.md — Referência das variáveis da UI](USO_E_ABAS.md#referência-das-variáveis-da-ui).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -590,7 +602,7 @@ sequenceDiagram
 ├──────────────────────────────────────┴──────────────────────┤
 │ Status atual: [mensagem do estado do robô]                    │
 ├─────────────────────────────────────────────────────────────┤
-│ [ Modo Contínuo ] [ Autorizar envio ao CLP ] [ Novo Ciclo ]  │
+│ [ Modo Contínuo ] [ Autorizar envio ao CLP ] [ Stop ]        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -600,9 +612,11 @@ sequenceDiagram
 | **Iniciar** | Inicia stream + inferência + CIP + RobotController |
 | **Pausar** | Pausa stream e inferência |
 | **Parar** | Para tudo e desconecta CLP |
+| **mm/px** | Spinbox: calibração em tempo real (efeito imediato) |
+| **ROI** | Checkbox: exibe/oculta o retângulo da área de confinamento sobre o vídeo (traço amarelo fino) |
 | **Modo Contínuo** | Checkbox: automático vs manual |
 | **Autorizar envio ao CLP** | Botão (modo manual): envia coordenadas após detecção |
-| **Novo Ciclo** | Botão (modo manual): libera próximo ciclo |
+| **Stop** | Botão: interrompe ciclo e comandos ao robô; detecções continuam |
 
 ---
 
@@ -612,7 +626,7 @@ sequenceDiagram
 |---------|--------|
 | **Fonte de Vídeo** | Tipo (USB/GigE), Índice USB, IP/Porta GigE, Tamanho buffer |
 | **Modelo RT-DETR** | Modelo, Caminho local, Device, Confiança mínima, Máx. detecções, FPS inferência |
-| **Pré-processamento** | Calibração mm/px, Brilho, Contraste, ROI (Ativar, X, Y, W, H) |
+| **Pré-processamento** | Calibração mm/px, Brilho, Contraste, Confinamento de Centroide (habilitar, X-, X+, Y+, Y- em mm) |
 | **Controle (CLP)** | IP, Porta, Timeout, Modo simulado, Testar Conexão, Reconexão, Heartbeat |
 | **Output** | Stream MJPEG (habilitar, porta, FPS) |
 
@@ -648,7 +662,6 @@ sequenceDiagram
 | InferenceEngine | detection.inference_engine |
 | CIPClient | communication.cip_client |
 | RobotController | control.robot_controller |
-| Application | core.application (opcional) |
 
 ## 7.3 Variáveis por Feature
 

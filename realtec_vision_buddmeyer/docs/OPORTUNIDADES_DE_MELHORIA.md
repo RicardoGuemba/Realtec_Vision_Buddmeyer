@@ -1,4 +1,4 @@
-# Oportunidades de Melhoria — Buddmeyer Vision Supervisório Pick-and-Place
+# Oportunidades de Melhoria — Realtec Vision Buddmeyer — Supervisório Pick-and-Place
 
 Este documento lista oportunidades de aprimoramento identificadas após a execução dos testes unitários e análise do código, com foco em **robustez**, **estabilidade** e **boas práticas** para um sistema supervisório industrial.
 
@@ -12,7 +12,7 @@ Este documento lista oportunidades de aprimoramento identificadas após a execu�
 - `detection.events` — BoundingBox, Detection, DetectionResult, DetectionEvent
 - `detection.postprocess` — NMS, setters
 - `preprocessing.transforms` — pixel_to_mm, ImageTransforms
-- `preprocessing.roi_manager` — ROI (geometria)
+- `preprocessing.transforms` — confinamento de centroide (ROI em mm)
 - `streaming.frame_buffer` — FrameBuffer, FrameInfo
 - `communication.connection_state` — ConnectionState, ConnectionStatus
 - `output.mjpeg_stream` — StreamFrameProvider, MjpegStreamServer

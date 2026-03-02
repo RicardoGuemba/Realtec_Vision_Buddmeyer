@@ -84,6 +84,11 @@ class PostProcessor:
         img_h, img_w = target_sizes[0].tolist()
         boxes = self._box_cxcywh_to_xyxy(boxes)
         boxes = boxes * torch.tensor([img_w, img_h, img_w, img_h], device=boxes.device)
+        # Clip ao bounds da imagem (objeto muito perto pode gerar bboxes fora do frame)
+        boxes[:, 0] = boxes[:, 0].clamp(0, img_w)
+        boxes[:, 1] = boxes[:, 1].clamp(0, img_h)
+        boxes[:, 2] = boxes[:, 2].clamp(0, img_w)
+        boxes[:, 3] = boxes[:, 3].clamp(0, img_h)
         
         # Obtém classe e score para cada box
         max_scores, labels = scores.max(-1)
@@ -156,7 +161,11 @@ class PostProcessor:
         x2 = boxes[:, 2]
         y2 = boxes[:, 3]
         
-        areas = (x2 - x1) * (y2 - y1)
+        # Garante x2 >= x1, y2 >= y1 (evita área negativa com bboxes degeneradas)
+        x1, x2 = np.minimum(x1, x2), np.maximum(x1, x2)
+        y1, y2 = np.minimum(y1, y2), np.maximum(y1, y2)
+        
+        areas = np.maximum((x2 - x1) * (y2 - y1), 1e-6)  # Evita área zero
         order = scores.argsort()[::-1]
         
         keep = []
@@ -177,7 +186,9 @@ class PostProcessor:
             h = np.maximum(0, yy2 - yy1)
             inter = w * h
             
-            iou = inter / (areas[i] + areas[order[1:]] - inter)
+            denom = areas[i] + areas[order[1:]] - inter
+            denom = np.maximum(denom, 1e-6)  # Evita divisão por zero (objeto muito perto, bboxes sobrepostas)
+            iou = inter / denom
             
             # Mantém boxes com IoU menor que threshold
             inds = np.where(iou <= threshold)[0]

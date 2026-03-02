@@ -19,7 +19,7 @@ from core.logger import get_logger
 logger = get_logger("core.startup")
 
 # Nome do arquivo na pasta Inicialização
-STARTUP_FILENAME = "BuddmeyerVision_Iniciar.bat"
+STARTUP_FILENAME = "RealtecVisionBuddmeyer_Iniciar.bat"
 
 
 def _get_project_root() -> Path:
@@ -85,7 +85,7 @@ def enable_auto_start() -> bool:
         return False
     
     bat_content = f'''@echo off
-title Buddmeyer Vision System - Auto-inicio
+title Realtec Vision Buddmeyer - Auto-inicio
 cd /d "{project_root}"
 "{python_exe}" "{main_py}"
 '''

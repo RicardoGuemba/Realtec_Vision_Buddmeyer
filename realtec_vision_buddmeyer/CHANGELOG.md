@@ -1,13 +1,52 @@
 # Changelog
 
-## [Unreleased] – Higienização e documentação
+## [Unreleased]
+
+_(Alterações em desenvolvimento.)_
+
+---
+
+## [2.1.0] – 2025-02-20
 
 ### Adicionado
 
+- **Menu Sair (Arquivo → Sair / Ctrl+Q):** Encerra todos os processos (stream, inferência, CLP, robô, MJPEG) e fecha a aplicação. `MainWindow._request_exit()` e `_force_shutdown()` garantem parada ordenada.
+- **Confinamento de centroide (ROI em mm):** Configuração → Pré-processamento: área retangular definida a partir do centro da imagem com X+, X-, Y+, Y- em mm (plano cartesiano). Centroides fora da área são projetados para o ponto mais próximo dentro da ROI (`clamp_centroid_to_confinement()`). Evita colisão da placa de ventosas com as paredes do contêiner. Config em `ConfinementROISettings`; aplicado em `OperationPage` e `RobotController`.
+- **Overlay da ROI na imagem:** Checkbox **ROI** na aba Operação liga/desliga o desenho do retângulo da área de confinamento sobre o vídeo (traço amarelo fino). `VideoWidget._draw_confinement_roi()`.
+- **Referência das variáveis da UI:** Nova seção em **docs/USO_E_ABAS.md** listando todas as variáveis/controles (tipo, localização, significado) das abas Operação, Configuração e Diagnósticos e da barra de status.
+- **Pré-carregamento do modelo:** `OperationPage.start_model_preload()` e sinal `model_preload_finished` para carregar o modelo em background após abrir a janela (evita travamento ao clicar Iniciar).
+
+### Removido
+
+- **preprocessing/preprocess_pipeline.py** e **preprocessing/roi_manager.py:** Não utilizados pelo fluxo principal (apenas `transforms`: pixel_to_mm, clamp_centroid_to_confinement, ImageTransforms).
+- **tests/unit/test_preprocessing_roi.py:** Testes do ROI antigo removidos com o módulo.
+
+### Alterado
+
+- **Branding:** Nome do produto e instaladores atualizados para **Realtec Vision Buddmeyer** (título da janela, menu Sobre, log `realtec_vision_buddmeyer.log`, instalador/diretório `RealtecVisionBuddmeyer`, scripts `Iniciar_Realtec_Vision_Buddmeyer.bat/.ps1`, etc.). Classe de exceção `BuddmeyerVisionError` mantida por compatibilidade.
+- **Botão "Novo Ciclo" → "Stop":** Na aba Operação, o botão interrompe imediatamente o ciclo e comandos ao robô; detecções continuam; apenas envio ao CLP e comandos ao robô são parados. Modo manual passa a avançar automaticamente para o próximo ciclo após PLACE (autorização manual apenas para envio ao CLP).
+- **preprocessing/__init__.py:** Exporta apenas `ImageTransforms`, `pixel_to_mm`, `clamp_centroid_to_confinement`.
+- **Documentação:** USO_E_ABAS, DOCUMENTACAO_SISTEMA_COMPLETA, DOCUMENTACAO_PARA_CLIENTE, DOCUMENTACAO_AVALIACAO_CLIENTE_TI, instalador e PRD atualizados (ROI overlay, referência UI, Stop, Realtec Vision Buddmeyer). Link em DOCUMENTACAO_SISTEMA_COMPLETA para a referência de variáveis da UI em USO_E_ABAS.
+- **Versão da aplicação:** `main.py` e CHANGELOG em 2.1.0.
+
+---
+
+## Histórico anterior (até 2.0)
+
+### Adicionado
+
+- **Estabilidade e resiliência (supervisório pick-and-place):**
+  - **RobotController:** Limpeza de estado em `stop()` (detecção, etapas, flags, recovery); limite de tentativas de recuperação a partir de ERROR (3 tentativas, depois aguarda intervenção); `get_status()` com serialização segura da detecção atual.
+  - **CIPClient:** Reset de `error_count`, `last_error` e `reconnect_attempts` em conexão e reconexão bem-sucedidas.
+  - **core/async_utils.py:** `safe_create_task()` — agenda coroutine apenas se o event loop estiver ativo, evitando crash ao encerrar a aplicação.
+  - Uso de `safe_create_task` em OperationPage, RobotController e CIPClient (conexão PLC, envio ao CLP, shutdown, polling do robô, reconnect, heartbeat).
+- **docs/ESTABILIDADE_E_RESILIENCIA.md:** Documento com causas de instabilidade e práticas aplicadas para supervisório.
 - **Auto-início com o Windows:** Nova aba Configuração → Sistema com opção "Iniciar automaticamente com o Windows". Quando habilitada, o sistema é adicionado à pasta Inicialização do Windows e restabelece automaticamente após reinício do PC (ex.: falta de energia). Implementação em `core/windows_startup.py` usando pasta Inicialização do usuário (sem privilégios de admin).
 
 ### Removido
 
+- **core/application.py:** Orquestrador não utilizado; main.py usa MainWindow diretamente.
+- **control/cycle_processor.py:** Lógica consolidada em RobotController; nunca importado.
 - **docs/DOCUMENTACAO_COMPLETA.md:** Redundante com DOCUMENTACAO_SISTEMA_COMPLETA.md (mais completo).
 
 ### Alterado
@@ -19,6 +58,16 @@
 ### Adicionado
 
 - **docs/README.md:** Índice de documentos com descrição e público-alvo.
+- **docs/GUIA_MANUTENCAO_E_INTEGRACAO.md:** Guia com: (1) como adicionar TAGs (config, tag_map, uso, TAG_CONTRACT); (2) mapa de manutenção por falha (tipo de falha → arquivo); (3) tutorial para sincronizar robô e supervisório (mm/px, handshake, checklist); (4) recomendações de arquitetura e pontos falhos. Índice e DOCUMENTACAO_SISTEMA_COMPLETA atualizados com links.
+
+### Corrigido
+
+- **Instabilidade com objeto muito perto da câmera:**
+  - **Post-process (NMS):** Proteção contra divisão por zero e bboxes degeneradas; clip de boxes aos limites da imagem (objeto muito perto pode gerar boxes fora do frame).
+  - **Comunicação periódica ao CLP:** Não envia coordenadas durante ciclo do robô (SENDING_DATA, WAITING_ACK, ACK_CONFIRMED, WAITING_PICK, WAITING_PLACE, WAITING_CYCLE_START) para evitar sobrescrever coordenadas em uso.
+  - **Throttle:** Intervalo mínimo de 500 ms entre envios ao CLP (evita flood quando objeto está muito perto e há detecção contínua).
+- **tag_map.py:** Uso de `model_dump()` em vez de `dir()` para carregar mapeamentos customizados (evita depreciação Pydantic v2.11).
+- **cip_client.write_detection_result:** Validação de coordenadas (range ±10000 mm, NaN/Inf) antes de enviar ao CLP.
 
 ---
 
@@ -26,7 +75,7 @@
 
 ### Adicionado
 
-- **Testes unitários (pytest):** 73 testes em `tests/unit/` para config, core.exceptions, detection.events, detection.postprocess, preprocessing.transforms, preprocessing.roi_manager, streaming.frame_buffer, communication.connection_state, output.mjpeg_stream.
+- **Testes unitários (pytest):** testes em `tests/unit/` para config, core.exceptions, detection.events, detection.postprocess, preprocessing.transforms, streaming.frame_buffer, communication.connection_state, output.mjpeg_stream.
 - **docs/OPORTUNIDADES_DE_MELHORIA.md:** Documento com 19 oportunidades de melhoria priorizadas (robustez, segurança industrial, observabilidade, testes, config, performance).
 - **pytest** em requirements.txt para execução de testes.
 

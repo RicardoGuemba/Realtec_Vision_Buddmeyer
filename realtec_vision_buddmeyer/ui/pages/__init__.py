@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Páginas (abas) da interface do sistema Buddmeyer Vision v2.0
+Páginas (abas) da interface do sistema Realtec Vision Buddmeyer v2.0
 """
 
 from .operation_page import OperationPage

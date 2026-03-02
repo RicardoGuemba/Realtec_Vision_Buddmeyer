@@ -289,37 +289,60 @@ class ConfigurationPage(QWidget):
         
         layout.addWidget(adjust_group)
         
-        # ROI
-        roi_group = QGroupBox("Região de Interesse (ROI)")
-        roi_layout = QFormLayout(roi_group)
-        
-        self._roi_enabled = QCheckBox("Ativar ROI")
-        roi_layout.addRow("", self._roi_enabled)
-        
-        roi_coords_layout = QHBoxLayout()
-        self._roi_x = QSpinBox()
-        self._roi_x.setRange(0, 9999)
-        roi_coords_layout.addWidget(QLabel("X:"))
-        roi_coords_layout.addWidget(self._roi_x)
-        
-        self._roi_y = QSpinBox()
-        self._roi_y.setRange(0, 9999)
-        roi_coords_layout.addWidget(QLabel("Y:"))
-        roi_coords_layout.addWidget(self._roi_y)
-        
-        self._roi_w = QSpinBox()
-        self._roi_w.setRange(1, 9999)
-        roi_coords_layout.addWidget(QLabel("W:"))
-        roi_coords_layout.addWidget(self._roi_w)
-        
-        self._roi_h = QSpinBox()
-        self._roi_h.setRange(1, 9999)
-        roi_coords_layout.addWidget(QLabel("H:"))
-        roi_coords_layout.addWidget(self._roi_h)
-        
-        roi_layout.addRow("Coordenadas:", roi_coords_layout)
-        
-        layout.addWidget(roi_group)
+        # Confinamento de centroide (ROI)
+        confine_group = QGroupBox("Confinamento de Centroide (ROI)")
+        confine_group.setToolTip(
+            "Define uma área retangular centrada na imagem da câmera.\n"
+            "Centroides fora desta área são projetados para o ponto mais próximo dentro dela.\n"
+            "Evita que a placa de ventosas colida com as paredes do contêiner.\n"
+            "Valores em mm; usa a calibração mm/px acima como referência."
+        )
+        confine_layout = QFormLayout(confine_group)
+
+        self._confinement_enabled = QCheckBox("Habilitar confinamento")
+        confine_layout.addRow("", self._confinement_enabled)
+
+        info_label = QLabel(
+            "Limites a partir do centro da imagem (plano cartesiano, em mm):"
+        )
+        info_label.setStyleSheet("color: #8b9dc3; font-size: 11px;")
+        confine_layout.addRow("", info_label)
+
+        x_layout = QHBoxLayout()
+        x_layout.addWidget(QLabel("X- (esquerda):"))
+        self._confine_x_neg = QDoubleSpinBox()
+        self._confine_x_neg.setRange(0.0, 5000.0)
+        self._confine_x_neg.setDecimals(1)
+        self._confine_x_neg.setSingleStep(10.0)
+        self._confine_x_neg.setSuffix(" mm")
+        x_layout.addWidget(self._confine_x_neg)
+        x_layout.addWidget(QLabel("X+ (direita):"))
+        self._confine_x_pos = QDoubleSpinBox()
+        self._confine_x_pos.setRange(0.0, 5000.0)
+        self._confine_x_pos.setDecimals(1)
+        self._confine_x_pos.setSingleStep(10.0)
+        self._confine_x_pos.setSuffix(" mm")
+        x_layout.addWidget(self._confine_x_pos)
+        confine_layout.addRow("Eixo X:", x_layout)
+
+        y_layout = QHBoxLayout()
+        y_layout.addWidget(QLabel("Y+ (acima):"))
+        self._confine_y_pos = QDoubleSpinBox()
+        self._confine_y_pos.setRange(0.0, 5000.0)
+        self._confine_y_pos.setDecimals(1)
+        self._confine_y_pos.setSingleStep(10.0)
+        self._confine_y_pos.setSuffix(" mm")
+        y_layout.addWidget(self._confine_y_pos)
+        y_layout.addWidget(QLabel("Y- (abaixo):"))
+        self._confine_y_neg = QDoubleSpinBox()
+        self._confine_y_neg.setRange(0.0, 5000.0)
+        self._confine_y_neg.setDecimals(1)
+        self._confine_y_neg.setSingleStep(10.0)
+        self._confine_y_neg.setSuffix(" mm")
+        y_layout.addWidget(self._confine_y_neg)
+        confine_layout.addRow("Eixo Y:", y_layout)
+
+        layout.addWidget(confine_group)
         
         layout.addStretch()
         
@@ -518,19 +541,13 @@ class ConfigurationPage(QWidget):
         self._contrast_slider.setValue(int(s.preprocess.contrast * 100))
         self._mm_per_pixel.setValue(s.preprocess.mm_per_pixel)
         
-        # ROI
-        if s.preprocess.roi and len(s.preprocess.roi) == 4:
-            self._roi_enabled.setChecked(True)
-            self._roi_x.setValue(s.preprocess.roi[0])
-            self._roi_y.setValue(s.preprocess.roi[1])
-            self._roi_w.setValue(s.preprocess.roi[2])
-            self._roi_h.setValue(s.preprocess.roi[3])
-        else:
-            self._roi_enabled.setChecked(False)
-            self._roi_x.setValue(0)
-            self._roi_y.setValue(0)
-            self._roi_w.setValue(640)
-            self._roi_h.setValue(480)
+        # Confinamento de centroide
+        c = s.preprocess.confinement
+        self._confinement_enabled.setChecked(c.enabled)
+        self._confine_x_pos.setValue(c.x_positive_mm)
+        self._confine_x_neg.setValue(c.x_negative_mm)
+        self._confine_y_pos.setValue(c.y_positive_mm)
+        self._confine_y_neg.setValue(c.y_negative_mm)
         
         # CLP
         self._plc_ip.setText(s.cip.ip)
@@ -577,16 +594,12 @@ class ConfigurationPage(QWidget):
         s.preprocess.contrast = self._contrast_slider.value() / 100
         s.preprocess.mm_per_pixel = self._mm_per_pixel.value()
         
-        # ROI
-        if self._roi_enabled.isChecked():
-            s.preprocess.roi = [
-                self._roi_x.value(),
-                self._roi_y.value(),
-                self._roi_w.value(),
-                self._roi_h.value(),
-            ]
-        else:
-            s.preprocess.roi = None
+        # Confinamento de centroide
+        s.preprocess.confinement.enabled = self._confinement_enabled.isChecked()
+        s.preprocess.confinement.x_positive_mm = self._confine_x_pos.value()
+        s.preprocess.confinement.x_negative_mm = self._confine_x_neg.value()
+        s.preprocess.confinement.y_positive_mm = self._confine_y_pos.value()
+        s.preprocess.confinement.y_negative_mm = self._confine_y_neg.value()
         
         # CLP
         s.cip.ip = self._plc_ip.text()

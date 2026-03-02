@@ -1,4 +1,4 @@
-# Buddmeyer Vision System v2.0
+# Realtec Vision Buddmeyer v2.0
 # Dependências Python
 # ====================
 

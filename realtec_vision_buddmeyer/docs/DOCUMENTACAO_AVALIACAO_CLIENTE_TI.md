@@ -26,7 +26,7 @@
 
 ## 1.1 O que é o sistema
 
-O **Realtec Vision Buddmeyer** (Buddmeyer Vision System v2.0) é um sistema supervisório para automação industrial do tipo **pick-and-place**:
+O **Realtec Vision Buddmeyer** (Realtec Vision Buddmeyer v2.0) é um sistema supervisório para automação industrial do tipo **pick-and-place**:
 
 - **Objetivo:** Detectar embalagens em tempo real, calcular a posição do centroide e enviar coordenadas ao CLP (Controlador Lógico Programável) para que o robô execute a coleta e posicionamento.
 - **Contexto:** Linhas de expedição, esteiras, células de picking com robôs articulados ou colaborativos.
@@ -128,7 +128,7 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 
 ## 3.1 Janela principal
 
-- **Título:** Buddmeyer Vision System v2.0  
+- **Título:** Realtec Vision Buddmeyer v2.0  
 - **Tamanho mínimo:** 1280×720  
 - **Menus:** Arquivo (Salvar configurações, Sair), Sistema (Iniciar, Parar, Recarregar modelo), Ajuda (Sobre)  
 - **Barra de status:** Estado do sistema (Rodando/Parado), FPS, estado do CLP (Conectado/Simulado/Desconectado), data/hora  
@@ -143,7 +143,9 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 | **Painel lateral** | Status do sistema, stream, inferência, CLP, robô; última detecção; contadores |
 | **Console de eventos** | Log em tempo real de ações e erros |
 | **Barra de status do ciclo** | Mensagem do estado atual (ex.: "Aguardando detecção") |
-| **Controles de ciclo** | Checkbox "Modo Contínuo"; botões "Autorizar envio ao CLP" e "Novo Ciclo" (modo manual) |
+| **mm/px** | Spinbox: calibração em tempo real (efeito imediato) |
+| **ROI** | Checkbox: exibe/oculta retângulo da área de confinamento sobre o vídeo (traço amarelo) |
+| **Controles de ciclo** | Checkbox "Modo Contínuo"; botões "Autorizar envio ao CLP" e "Stop" (modo manual) |
 
 ## 3.3 Aba Configuração
 
@@ -151,7 +153,7 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 |---------|--------|
 | **Fonte de Vídeo** | Tipo (USB/GigE), índice USB, IP/porta GigE, tamanho do buffer |
 | **Modelo RT-DETR** | Modelo, caminho local, device, confiança mínima, máximo de detecções, FPS de inferência |
-| **Pré-processamento** | Calibração mm/px, brilho, contraste, ROI |
+| **Pré-processamento** | Calibração mm/px, brilho, contraste, Confinamento de Centroide (ROI em mm) |
 | **Controle (CLP)** | IP, porta, timeout, modo simulado, testar conexão, reconexão, heartbeat |
 | **Sistema** | Iniciar automaticamente com o Windows (restabelece após falta de energia) |
 | **Output** | Stream MJPEG (habilitar, porta, FPS), **URL (acesso web)** com botão Copiar |
