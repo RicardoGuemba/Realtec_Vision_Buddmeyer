@@ -1,8 +1,14 @@
-# Documentação Completa — Realtec Vision Buddmeyer v2.0
+# Documentação Completa — Realtec Vision Buddmeyer v2.1.0
 
 **Visão de alto e baixo nível** — Arquitetura, features, variáveis, classes, funções, diagramas, casos de uso e UI.
 
-> **Documentos relacionados:** `DOCUMENTACAO_PARA_CLIENTE.md` (versão para cliente) | `USO_E_ABAS.md` (guia de uso) | `TAG_CONTRACT.md` (contrato de TAGs CLP) | `GUIA_MANUTENCAO_E_INTEGRACAO.md` (adicionar TAGs, mapa de falha, tutorial robô–supervisório, arquitetura).
+> **Documentos relacionados:**
+> - `DOCUMENTACAO_PARA_CLIENTE.md` — Versão para cliente
+> - `USO_E_ABAS.md` — Guia de uso e referência de variáveis
+> - `REFERENCIA_VARIAVEIS_UI_DETALHADA.md` — Explicação detalhada de cada variável, FPS, streaming
+> - `PERGUNTAS_RESPOSTAS.md` — Perguntas e respostas sobre o sistema
+> - `TAG_CONTRACT.md` — Contrato de TAGs CLP
+> - `GUIA_MANUTENCAO_E_INTEGRACAO.md` — Adicionar TAGs, mapa de falha, tutorial robô–supervisório
 
 ---
 
@@ -571,7 +577,7 @@ O confinamento de centroide impede que coordenadas enviadas ao CLP ultrapassem o
 
 | Elemento | Descrição |
 |---------|-----------|
-| **Título** | Realtec Vision Buddmeyer v2.0 |
+| **Título** | Realtec Vision Buddmeyer v2.1.0 |
 | **Tamanho mínimo** | 1280×720 |
 | **Menu Arquivo** | Salvar Configurações (Ctrl+S), Sair (Ctrl+Q) |
 | **Menu Sistema** | Iniciar (F5), Parar (F6), Recarregar Modelo |
@@ -585,6 +591,10 @@ O confinamento de centroide impede que coordenadas enviadas ao CLP ultrapassem o
 ## 6.2 Aba Operação — Layout e Elementos
 
 Para a **lista completa de variáveis da UI** (tipo, localização e significado de cada controle em todas as abas), ver [USO_E_ABAS.md — Referência das variáveis da UI](USO_E_ABAS.md#referência-das-variáveis-da-ui).
+
+Para **explicação detalhada** de cada variável, dados de visão computacional (FPS, streaming) e mapeamento para config: [REFERENCIA_VARIAVEIS_UI_DETALHADA.md](REFERENCIA_VARIAVEIS_UI_DETALHADA.md).
+
+Para **perguntas e respostas** sobre o sistema: [PERGUNTAS_RESPOSTAS.md](PERGUNTAS_RESPOSTAS.md).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

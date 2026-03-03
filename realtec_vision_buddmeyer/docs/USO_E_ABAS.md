@@ -1,8 +1,12 @@
 # Uso do sistema e ajustes por aba
 
-Realtec Vision Buddmeyer v2.0 — Guia das abas Operação, Configuração e Diagnósticos.
+Realtec Vision Buddmeyer v2.1.0 — Guia das abas Operação, Configuração e Diagnósticos.
 
 Neste documento: descrição dos elementos de cada aba e, na seção **Referência das variáveis da UI**, a lista de todas as variáveis/controles com tipo, localização e significado.
+
+> **Documentos relacionados:**
+> - [REFERENCIA_VARIAVEIS_UI_DETALHADA.md](REFERENCIA_VARIAVEIS_UI_DETALHADA.md) — Explicação detalhada de cada variável, dados de visão computacional (FPS, streaming) e mapeamento para config.
+> - [PERGUNTAS_RESPOSTAS.md](PERGUNTAS_RESPOSTAS.md) — Perguntas e respostas sobre o sistema.
 
 ---
 
@@ -316,3 +320,17 @@ Para forçar modo simulado sem tentar o CLP real, marque **"Modo simulado"** em 
   - **Modo simulado marcado** — sempre simulado.
 - **Em execução:** Barra de status da janela principal: **"CLP: Conectado"** = CLP real; **"CLP: Simulado"** = modo simulado (por opção ou por falha de conexão).
 - **Console de eventos:** ao iniciar, exibe mensagem explícita indicando se conectou ao CLP real ou operando em modo simulado.
+
+---
+
+## Perguntas frequentes (resumo)
+
+Para respostas detalhadas, consulte [PERGUNTAS_RESPOSTAS.md](PERGUNTAS_RESPOSTAS.md).
+
+| Pergunta | Resposta breve |
+|----------|----------------|
+| **Posso alterar o FPS em tempo real?** | Não. FPS do stream vem da câmera; FPS de inferência e MJPEG exigem Salvar + reinício. |
+| **O streaming tem quantos FPS?** | O FPS nativo da câmera (ex.: 15–30). Exibido na barra de status e em Diagnósticos. |
+| **Onde configuro o FPS de inferência?** | Configuração → Modelo RT-DETR → FPS de inferência (padrão: 10). |
+| **Quais alterações exigem reinício?** | Fonte, FPS inferência, modelo, ROI limites, stream MJPEG, CLP. |
+| **Quais têm efeito imediato?** | mm/px, ROI (exibição), Modo Contínuo. |

@@ -1,10 +1,12 @@
-# Realtec Vision Buddmeyer v2.0 — Documentação para o Cliente
+# Realtec Vision Buddmeyer v2.1.0 — Documentação para o Cliente
 
 **Documento de referência técnico-funcional** — Visão de alto e baixo nível, componentes, variáveis por feature e interface, para compartilhamento com o cliente.
 
+> **Documentos complementares:** [REFERENCIA_VARIAVEIS_UI_DETALHADA.md](REFERENCIA_VARIAVEIS_UI_DETALHADA.md) (variáveis detalhadas, FPS, streaming) | [PERGUNTAS_RESPOSTAS.md](PERGUNTAS_RESPOSTAS.md) (Perguntas e Respostas).
+
 ---
 
-**Versão do sistema:** 2.0  
+**Versão do sistema:** 2.1.0  
 **Data do documento:** 2025  
 **Confidencialidade:** Uso do cliente e parceiros do projeto.
 
