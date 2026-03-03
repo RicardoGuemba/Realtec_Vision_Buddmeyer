@@ -45,8 +45,8 @@ def main() -> int:
     # Configura ambiente
     setup_environment()
     
-    # Carrega configurações
-    config_path = Path(__file__).parent / "config" / "config.yaml"
+    # Carrega configurações (path absoluto para evitar conflito ao iniciar via .bat)
+    config_path = Path(__file__).resolve().parent / "config" / "config.yaml"
     settings = get_settings(config_path)
     
     # Configura logging

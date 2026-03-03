@@ -423,7 +423,7 @@ sequenceDiagram
 |--------|-------------------|-----------|
 | `StreamingSettings` | source_type, usb_camera_index, gige_ip, gige_port, max_frame_buffer_size | Somente câmeras USB e GigE |
 | `DetectionSettings` | model_path, default_model, confidence_threshold, max_detections, target_classes, inference_fps, device | Modelo e parâmetros de inferência |
-| `PreprocessSettings` | profile, brightness, contrast, roi, mm_per_pixel | Pré-processamento e calibração |
+| `PreprocessSettings` | profile, brightness, contrast, confinement, mm_per_pixel | Pré-processamento e calibração |
 | `CIPSettings` | ip, port, connection_timeout, timeout_ms, retry_interval, max_retries, io_retries, simulated, heartbeat_interval, auto_reconnect | Conexão CIP |
 | `RobotControlSettings` | ack_timeout, pick_timeout, place_timeout | Timeouts do ciclo |
 | `TagSettings` | VisionReady, CentroidX, CentroidY, RobotAck, ... | Mapeamento nome lógico → físico |
@@ -541,7 +541,7 @@ sequenceDiagram
 |----------------|-----------|
 | `ImageTransforms` | Brilho, contraste; usa `mm_per_pixel` para conversão pixel→mm |
 | `clamp_centroid_to_confinement()` | Projeta centroides para dentro da ROI de confinamento (evita colisão da placa de ventosas) |
-| `ConfinementROISettings` | Configuração da ROI de confinamento: enabled, x_positive_mm, x_negative_mm, y_positive_mm, y_negative_mm |
+| `ConfinementROISettings` | Configuração da ROI de confinamento: show_roi, enabled, x_positive_mm, x_negative_mm, y_positive_mm, y_negative_mm |
 
 ### Confinamento de Centroide (ROI)
 
@@ -561,7 +561,7 @@ O confinamento de centroide impede que coordenadas enviadas ao CLP ultrapassem o
 3. Se o centroide detectado estiver **dentro** da ROI, é enviado sem alteração.
 4. Se estiver **fora**, é projetado (clamped) para o ponto mais próximo dentro da ROI — ou seja, cada eixo é limitado independentemente ao intervalo [centro - limite_negativo, centro + limite_positivo].
 5. A função `clamp_centroid_to_confinement()` implementa esta lógica e é aplicada tanto na `OperationPage._communicate_centroid_to_plc()` quanto no `RobotController._send_data_to_plc()`.
-6. **Visualização:** Na aba Operação, o checkbox **ROI** liga/desliga a exibição do retângulo da área de confinamento sobre a imagem (traço amarelo fino), desenhado pelo `VideoWidget._draw_confinement_roi()`.
+6. **Visualização:** Na aba Operação, o combo **ROI: Ligado/Desligado** controla a exibição do retângulo da área de confinamento sobre a imagem (linhas verdes), desenhado pelo `VideoWidget._draw_confinement_roi()`.
 
 ---
 
@@ -613,7 +613,7 @@ Para a **lista completa de variáveis da UI** (tipo, localização e significado
 | **Pausar** | Pausa stream e inferência |
 | **Parar** | Para tudo e desconecta CLP |
 | **mm/px** | Spinbox: calibração em tempo real (efeito imediato) |
-| **ROI** | Checkbox: exibe/oculta o retângulo da área de confinamento sobre o vídeo (traço amarelo fino) |
+| **ROI** | QComboBox: Ligado/Desligado — exibe/oculta o retângulo da ROI de confinamento sobre o vídeo (linhas verdes) |
 | **Modo Contínuo** | Checkbox: automático vs manual |
 | **Autorizar envio ao CLP** | Botão (modo manual): envia coordenadas após detecção |
 | **Stop** | Botão: interrompe ciclo e comandos ao robô; detecções continuam |

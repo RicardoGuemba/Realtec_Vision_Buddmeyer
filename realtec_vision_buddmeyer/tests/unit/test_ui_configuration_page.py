@@ -56,3 +56,26 @@ class TestConfigurationPageSaveFeedback:
             event = QShowEvent()
             page.showEvent(event)
             mock_load.assert_called_once()
+
+    def test_roi_confinement_combo_loads_and_saves(self):
+        """Verifica que o combo ROI de confinamento carrega e salva show_roi corretamente."""
+        from config import get_settings
+
+        settings = get_settings(reload=True)
+        settings.preprocess.confinement.show_roi = True
+
+        from ui.pages.configuration_page import ConfigurationPage
+
+        page = ConfigurationPage()
+        assert hasattr(page, "_show_roi_combo")
+        assert page._show_roi_combo.count() == 2
+        assert page._show_roi_combo.currentIndex() == 0  # Ligado
+
+        settings.preprocess.confinement.show_roi = False
+        page._load_settings()
+        assert page._show_roi_combo.currentIndex() == 1  # Desligado
+
+        page._show_roi_combo.setCurrentIndex(0)
+        with patch("config.settings.Settings.to_yaml", MagicMock()):
+            page._save_settings()
+        assert settings.preprocess.confinement.show_roi is True

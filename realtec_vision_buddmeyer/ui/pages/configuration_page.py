@@ -288,25 +288,30 @@ class ConfigurationPage(QWidget):
         adjust_layout.addRow("Contraste:", contrast_layout)
         
         layout.addWidget(adjust_group)
-        
-        # Confinamento de centroide (ROI)
-        confine_group = QGroupBox("Confinamento de Centroide (ROI)")
-        confine_group.setToolTip(
-            "Define uma área retangular centrada na imagem da câmera.\n"
-            "Centroides fora desta área são projetados para o ponto mais próximo dentro dela.\n"
-            "Evita que a placa de ventosas colida com as paredes do contêiner.\n"
-            "Valores em mm; usa a calibração mm/px acima como referência."
-        )
-        confine_layout = QFormLayout(confine_group)
 
-        self._confinement_enabled = QCheckBox("Habilitar confinamento")
-        confine_layout.addRow("", self._confinement_enabled)
+        # ROI para confinamento — X e Y relativos ao centro (substitui a antiga ROI absoluta)
+        roi_group = QGroupBox("ROI para Confinamento")
+        roi_group.setToolTip(
+            "Área de trabalho com X e Y relativos ao centro da imagem (em mm).\n"
+            "Exibido com linhas verdes na aba Operação quando o checkbox ROI está marcado.\n"
+            "Centroides fora desta área são projetados para o ponto mais próximo dentro dela.\n"
+            "Usa a calibração mm/px acima como referência."
+        )
+        roi_layout = QFormLayout(roi_group)
+
+        self._show_roi_combo = QComboBox()
+        self._show_roi_combo.addItems(["Ligado", "Desligado"])
+        self._show_roi_combo.setToolTip("Liga/desliga a exibição do retângulo da ROI de confinamento (linhas verdes) na aba Operação.")
+        roi_layout.addRow("ROI de confinamento:", self._show_roi_combo)
+
+        self._confinement_enabled = QCheckBox("Habilitar confinamento de centroide")
+        roi_layout.addRow("", self._confinement_enabled)
 
         info_label = QLabel(
             "Limites a partir do centro da imagem (plano cartesiano, em mm):"
         )
         info_label.setStyleSheet("color: #8b9dc3; font-size: 11px;")
-        confine_layout.addRow("", info_label)
+        roi_layout.addRow("", info_label)
 
         x_layout = QHBoxLayout()
         x_layout.addWidget(QLabel("X- (esquerda):"))
@@ -323,7 +328,7 @@ class ConfigurationPage(QWidget):
         self._confine_x_pos.setSingleStep(10.0)
         self._confine_x_pos.setSuffix(" mm")
         x_layout.addWidget(self._confine_x_pos)
-        confine_layout.addRow("Eixo X:", x_layout)
+        roi_layout.addRow("Eixo X:", x_layout)
 
         y_layout = QHBoxLayout()
         y_layout.addWidget(QLabel("Y+ (acima):"))
@@ -340,9 +345,9 @@ class ConfigurationPage(QWidget):
         self._confine_y_neg.setSingleStep(10.0)
         self._confine_y_neg.setSuffix(" mm")
         y_layout.addWidget(self._confine_y_neg)
-        confine_layout.addRow("Eixo Y:", y_layout)
+        roi_layout.addRow("Eixo Y:", y_layout)
 
-        layout.addWidget(confine_group)
+        layout.addWidget(roi_group)
         
         layout.addStretch()
         
@@ -541,8 +546,9 @@ class ConfigurationPage(QWidget):
         self._contrast_slider.setValue(int(s.preprocess.contrast * 100))
         self._mm_per_pixel.setValue(s.preprocess.mm_per_pixel)
         
-        # Confinamento de centroide
+        # ROI / Confinamento (X e Y relativos ao centro)
         c = s.preprocess.confinement
+        self._show_roi_combo.setCurrentIndex(0 if c.show_roi else 1)
         self._confinement_enabled.setChecked(c.enabled)
         self._confine_x_pos.setValue(c.x_positive_mm)
         self._confine_x_neg.setValue(c.x_negative_mm)
@@ -594,7 +600,8 @@ class ConfigurationPage(QWidget):
         s.preprocess.contrast = self._contrast_slider.value() / 100
         s.preprocess.mm_per_pixel = self._mm_per_pixel.value()
         
-        # Confinamento de centroide
+        # ROI / Confinamento (X e Y relativos ao centro)
+        s.preprocess.confinement.show_roi = self._show_roi_combo.currentIndex() == 0
         s.preprocess.confinement.enabled = self._confinement_enabled.isChecked()
         s.preprocess.confinement.x_positive_mm = self._confine_x_pos.value()
         s.preprocess.confinement.x_negative_mm = self._confine_x_neg.value()

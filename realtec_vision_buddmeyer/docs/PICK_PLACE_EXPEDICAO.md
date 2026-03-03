@@ -89,7 +89,7 @@ Esses valores podem ser ajustados no código do `SimulatedPLC` (`communication/c
 
 ## 5. Modo manual por padrão
 
-- Ao abrir a aplicação, o checkbox **Modo Contínuo** está **desmarcado**, ou seja, o sistema inicia em **modo manual**.
+- Ao abrir a aplicação, o checkbox **Modo Contínuo** está **marcado** por padrão, ou seja, o sistema inicia em **modo contínuo** (ciclos automáticos de detecção, CLP e pick-and-place).
 - No modo manual:
   1. Após uma **deteção** com threshold adequado, o sistema **pede autorização** para enviar ao CLP (botão "Autorizar envio ao CLP").
   2. Após o **fim do ciclo**, o sistema **pede autorização** para o próximo ciclo (botão "Novo Ciclo").

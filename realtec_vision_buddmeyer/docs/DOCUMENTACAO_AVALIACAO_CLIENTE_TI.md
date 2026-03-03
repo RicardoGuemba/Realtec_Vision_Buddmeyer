@@ -144,7 +144,7 @@ Opcionalmente, um **stream MJPEG** permite visualizar o vídeo com detecções e
 | **Console de eventos** | Log em tempo real de ações e erros |
 | **Barra de status do ciclo** | Mensagem do estado atual (ex.: "Aguardando detecção") |
 | **mm/px** | Spinbox: calibração em tempo real (efeito imediato) |
-| **ROI** | Checkbox: exibe/oculta retângulo da área de confinamento sobre o vídeo (traço amarelo) |
+| **ROI** | QComboBox: Ligado/Desligado — exibe/oculta retângulo da ROI de confinamento sobre o vídeo (linhas verdes) |
 | **Controles de ciclo** | Checkbox "Modo Contínuo"; botões "Autorizar envio ao CLP" e "Stop" (modo manual) |
 
 ## 3.3 Aba Configuração

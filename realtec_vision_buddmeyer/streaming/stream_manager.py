@@ -107,7 +107,7 @@ class StreamWorker(QThread):
         self._paused = False
         self._pause_condition.wakeAll()
         self._mutex.unlock()
-        self.wait()
+        self.wait(2000)  # Timeout reduzido para evitar UI "não responde"
 
 
 class StreamManager(QObject):

@@ -34,7 +34,11 @@ class VideoWidget(QWidget):
         self._current_detections: List[Detection] = []
         self._show_overlay = True
         self._show_fps = True
-        self._show_confinement_roi = False
+        # Inicializa com valor do config (evita conflito com ROI antiga ao iniciar via .bat)
+        try:
+            self._show_confinement_roi = get_settings().preprocess.confinement.show_roi
+        except Exception:
+            self._show_confinement_roi = False
         self._current_fps = 0.0
         # Cache para evitar conversão numpy→QImage→QPixmap a cada paintEvent (reduz travamentos)
         self._cached_pixmap: Optional[QPixmap] = None
@@ -279,44 +283,58 @@ class VideoWidget(QWidget):
         scale_x: float,
         scale_y: float,
     ) -> None:
-        """Desenha o retângulo da ROI de confinamento (traço fino amarelo)."""
-        settings = get_settings()
-        conf = settings.preprocess.confinement
-        if not conf.enabled:
+        """
+        Desenha o retângulo da ROI que delimita a área de trabalho (linhas verdes).
+        
+        Usa preprocess.confinement (X-, X+, Y+, Y- em mm relativos ao centro).
+        Centro da imagem = origem; coordenadas convertidas para pixels via mm/px.
+        """
+        frame = self._current_frame
+        if frame is None:
+            return
+        h, w = frame.shape[:2]
+        if w <= 0 or h <= 0:
             return
 
-        frame = self._current_frame
-        h, w = frame.shape[:2]
+        settings = get_settings()
+        conf = settings.preprocess.confinement
         mm_per_px = settings.preprocess.mm_per_pixel
         if mm_per_px <= 0:
-            return
+            mm_per_px = 1.0
 
         # Centro da imagem em pixels
         cx_img = w / 2.0
         cy_img = h / 2.0
 
-        # Limites da ROI em pixels (converter mm → px)
-        roi_left = cx_img - conf.x_negative_mm / mm_per_px
-        roi_right = cx_img + conf.x_positive_mm / mm_per_px
-        roi_top = cy_img - conf.y_positive_mm / mm_per_px
-        roi_bottom = cy_img + conf.y_negative_mm / mm_per_px
+        # Limites em mm relativos ao centro → converter para pixels
+        # X- (esquerda): px = cx - mm/mm_per_px
+        # X+ (direita): px = cx + mm/mm_per_px
+        # Y+ (acima) = valor pixel menor: px = cy - mm/mm_per_px
+        # Y- (abaixo) = valor pixel maior: px = cy + mm/mm_per_px
+        x_neg_px = conf.x_negative_mm / mm_per_px
+        x_pos_px = conf.x_positive_mm / mm_per_px
+        y_pos_px = conf.y_positive_mm / mm_per_px
+        y_neg_px = conf.y_negative_mm / mm_per_px
 
-        # Converte para coordenadas do widget
+        roi_left = cx_img - x_neg_px
+        roi_right = cx_img + x_pos_px
+        roi_top = cy_img - y_pos_px
+        roi_bottom = cy_img + y_neg_px
+
         rx1 = int(roi_left * scale_x) + offset_x
         ry1 = int(roi_top * scale_y) + offset_y
         rx2 = int(roi_right * scale_x) + offset_x
         ry2 = int(roi_bottom * scale_y) + offset_y
 
-        pen = QPen(QColor(255, 255, 0, 200), 1, Qt.SolidLine)
+        pen = QPen(QColor(0, 255, 0, 220), 2, Qt.SolidLine)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         painter.drawRect(rx1, ry1, rx2 - rx1, ry2 - ry1)
 
-        # Label discreto no canto superior esquerdo da ROI
-        font = QFont("Segoe UI", 8)
+        font = QFont("Segoe UI", 9)
         painter.setFont(font)
-        painter.setPen(QPen(QColor(255, 255, 0, 200)))
-        painter.drawText(rx1 + 4, ry1 + 12, "ROI")
+        painter.setPen(QPen(QColor(0, 255, 0, 220)))
+        painter.drawText(rx1 + 4, ry1 + 14, "ROI")
 
     def _draw_fps(self, painter: QPainter) -> None:
         """Desenha o FPS no canto."""

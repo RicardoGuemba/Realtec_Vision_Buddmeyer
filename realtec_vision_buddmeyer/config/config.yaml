@@ -23,10 +23,11 @@ preprocess:
   contrast: 0.0
   confinement:
     enabled: true
-    x_positive_mm: 20.0
-    x_negative_mm: 20.0
-    y_positive_mm: 15.0
-    y_negative_mm: 10.0
+    show_roi: true
+    x_positive_mm: 200.0
+    x_negative_mm: 200.0
+    y_positive_mm: 150.0
+    y_negative_mm: 100.0
   mm_per_pixel: 1.0
 cip:
   ip: 187.99.124.229

@@ -70,6 +70,7 @@ class ConfinementROISettings(BaseModel):
     """
 
     enabled: bool = Field(default=False, description="Habilitar confinamento de centroide")
+    show_roi: bool = Field(default=True, description="Exibir retângulo da ROI sobre o vídeo na aba Operação")
     x_positive_mm: float = Field(default=200.0, ge=0.0, description="Limite X positivo (mm à direita do centro)")
     x_negative_mm: float = Field(default=200.0, ge=0.0, description="Limite X negativo (mm à esquerda do centro)")
     y_positive_mm: float = Field(default=150.0, ge=0.0, description="Limite Y positivo (mm acima do centro)")
@@ -82,7 +83,6 @@ class PreprocessSettings(BaseModel):
     profile: str = Field(default="default", description="Perfil de pré-processamento")
     brightness: float = Field(default=0.0, ge=-1.0, le=1.0, description="Ajuste de brilho")
     contrast: float = Field(default=0.0, ge=-1.0, le=1.0, description="Ajuste de contraste")
-    roi: Optional[List[int]] = Field(default=None, description="ROI [x, y, width, height]")
     confinement: ConfinementROISettings = Field(
         default_factory=ConfinementROISettings,
         description="ROI de confinamento do centroide (limita coordenadas enviadas ao CLP)",

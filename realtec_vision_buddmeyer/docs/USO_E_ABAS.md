@@ -36,8 +36,8 @@ O modo (real vs simulado) é definido em **Configuração → Controle (CLP)** (
 - **Iniciar (F5):** inicia stream + inferência + conexão CLP + controlador de robô. A fonte usada é a **selecionada no combo** (não apenas a do config.yaml).
 - **Parar (F6):** para stream, inferência, controlador e encerra conexão CLP (VisionReady = False). A parada é executada em segundo plano para não bloquear a interface.
 - **mm/px:** calibração em tempo real (mesmo valor da Configuração; efeito imediato nas coordenadas exibidas e enviadas ao CLP).
-- **ROI (checkbox):** exibe ou oculta o retângulo da área de confinamento sobre a imagem (traço fino amarelo). Útil para visualizar a região válida para centroides quando o confinamento está habilitado em Configuração → Pré-processamento.
-- **Modo Contínuo (checkbox):** quando marcado, ciclos de pick-and-place executam automaticamente sem intervenção. Quando desmarcado (**padrão**), **após uma detecção** aguarda "Autorizar envio ao CLP" antes de enviar coordenadas.
+- **ROI (combo):** Liga/Desligado — exibe ou oculta o retângulo da ROI de confinamento sobre a imagem (linhas verdes). Dimensionamento em Configuração → Pré-processamento.
+- **Modo Contínuo (checkbox):** quando marcado (**padrão**), ciclos de detecção, CLP e simulação pick-and-place executam automaticamente. Quando desmarcado, **após uma detecção** aguarda "Autorizar envio ao CLP" antes de enviar coordenadas.
 - **Autorizar envio ao CLP (botão):** em modo manual, quando um objeto é detectado (acima do threshold), este botão é exibido. Ao clicar, as coordenadas são enviadas ao CLP e o ciclo (ACK → Pick → Place) segue. Sem isso, o processo não é deflagado.
 - **Status atual (barra):** exibe em tempo real a etapa em execução (ex.: "Aguardando PICK…", "PLACE concluído").
 
@@ -86,8 +86,8 @@ Abaixo, cada variável ou controle da interface é listado com tipo, localizaç�
 | **Iniciar** | QPushButton | Inicia stream, inferência, conexão CIP e controlador de robô. Atalho: F5. Desabilitado enquanto o sistema está rodando. |
 | **Parar** | QPushButton | Para stream, inferência, controlador e encerra conexão CLP (VisionReady = False). Atalho: F6. Parada em segundo plano (não bloqueia a UI). |
 | **mm/px** | QDoubleSpinBox | Calibração mm por pixel (ex.: 0,25). Valor em tempo real; coordenadas exibidas e enviadas ao CLP usam este valor. Sincronizado com Configuração → Pré-processamento. |
-| **ROI** | QCheckBox | Liga/desliga a exibição do retângulo da área de confinamento sobre o vídeo (traço amarelo fino). Só desenha se o confinamento estiver habilitado em Configuração. |
-| **Modo Contínuo** | QCheckBox | Marcado: ciclos seguem automaticamente após cada detecção. Desmarcado (padrão): após detecção, aguarda "Autorizar envio ao CLP". |
+| **ROI** | QComboBox | Liga/Desligado — exibe ou oculta o retângulo da ROI de confinamento sobre o vídeo (linhas verdes). Dimensionamento em Configuração → Pré-processamento. |
+| **Modo Contínuo** | QCheckBox | Marcado (padrão): ciclos de detecção, CLP e pick-and-place seguem automaticamente. Desmarcado: após detecção, aguarda "Autorizar envio ao CLP". |
 | **Autorizar envio ao CLP** | QPushButton | Visível em modo manual quando há detecção. Ao clicar, envia coordenadas ao CLP e inicia o ciclo (ACK → Pick → Place). |
 | **Status atual** | QLabel | Texto da etapa atual do controlador (ex.: "Aguardando detecção", "Aguardando PICK…", "PLACE concluído"). |
 | **Vídeo (central)** | VideoWidget | Exibe stream ao vivo, overlay de detecções (caixa e centroide da melhor detecção) e, se ativo, o retângulo da ROI. Duplo clique ou F11: tela cheia. |
@@ -237,7 +237,7 @@ Abaixo, cada variável ou controle da interface é listado com tipo, localizaç�
 
 - **Calibração mm/px:** Valor (mm/pixel) para coordenadas do centroide. 1 = pixels. Outro valor = (u,v) exibidos e enviados ao CLP em mm.
 - **Brilho / Contraste:** Sliders (-100 a 100) para ajuste fino.
-- **Confinamento de Centroide (ROI):** Quando habilitado, define uma área retangular centrada na imagem da câmera usando limites em mm (plano cartesiano): X- (esquerda), X+ (direita), Y+ (acima), Y- (abaixo). Centroides detectados fora desta área são projetados para o ponto mais próximo dentro da ROI. Isto evita que a placa de ventosas colida com as paredes do contêiner quando o centroide está próximo à borda. Na aba **Operação**, o checkbox **ROI** permite exibir ou ocultar o retângulo dessa área sobre o vídeo (traço amarelo fino).
+- **Confinamento de Centroide (ROI):** Quando habilitado, define uma área retangular centrada na imagem da câmera usando limites em mm (plano cartesiano): X- (esquerda), X+ (direita), Y+ (acima), Y- (abaixo). Centroides detectados fora desta área são projetados para o ponto mais próximo dentro da ROI. Isto evita que a placa de ventosas colida com as paredes do contêiner quando o centroide está próximo à borda. Na aba **Operação**, o combo **ROI: Ligado/Desligado** permite exibir ou ocultar o retângulo dessa área sobre o vídeo (linhas verdes).
 
 ### Subaba: Sistema
 

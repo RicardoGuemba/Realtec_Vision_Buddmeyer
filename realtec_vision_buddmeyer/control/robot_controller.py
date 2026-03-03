@@ -189,8 +189,8 @@ class RobotController(QObject):
         # Flag para serializar processamento (evita recursão/concorrência)
         self._processing = False
         
-        # Modo de ciclo: "manual" (aguarda botão) ou "continuous" (auto)
-        self._cycle_mode: str = "manual"
+        # Modo de ciclo: "manual" (aguarda botão) ou "continuous" (auto, comunicando CLP pick-and-place)
+        self._cycle_mode: str = "continuous"
         
         # Autorização do usuário para enviar coordenadas ao CLP (modo manual, após detecção)
         self._user_send_authorized: bool = False

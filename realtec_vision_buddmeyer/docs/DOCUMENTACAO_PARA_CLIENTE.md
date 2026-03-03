@@ -278,7 +278,7 @@ graph TB
 |---------------------|-----------|----------------------|
 | mm por pixel | Fator de conversão coordenadas (px → mm) | config.yaml → preprocess.mm_per_pixel; Config → Pré-processamento |
 | Brilho / contraste | Ajustes opcionais de imagem | config.yaml → preprocess; sliders na Config |
-| ROI | Região de interesse (x, y, largura, altura) | config.yaml → preprocess.roi; Config → Pré-processamento |
+| ROI de confinamento | Área retangular (X-, X+, Y+, Y- em mm relativos ao centro) | config.yaml → preprocess.confinement; Config → Pré-processamento; combo Ligado/Desligado para exibição |
 
 ### Feature: Comunicação CLP
 

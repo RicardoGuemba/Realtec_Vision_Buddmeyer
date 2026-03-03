@@ -169,7 +169,7 @@ class InferenceWorker(QThread):
         self._pause_condition.wakeAll()
         self._frame_condition.wakeAll()
         self._mutex.unlock()
-        self.wait()
+        self.wait(2000)  # Timeout reduzido para evitar UI "não responde"
 
 
 class InferenceEngine(QObject):

@@ -58,9 +58,10 @@ class SystemStopWorker(QThread):
 
     def run(self) -> None:
         try:
-            self._page._robot_controller.stop()
-            self._page._inference_engine.stop()
+            # Ordem: stream primeiro (corta frames), inferência, robô
             self._page._stream_manager.stop()
+            self._page._inference_engine.stop()
+            self._page._robot_controller.stop()
         except Exception as e:
             self._page._logger.warning("stop_worker_error", error=str(e))
         self.finished.emit()
@@ -109,10 +110,15 @@ class OperationPage(QWidget):
         self._is_stopping = False
 
         self._setup_ui()
-        self._sync_combo_to_settings()
+        self._sync_combo_to_settings()  # Inclui ROI de confinamento
         self._connect_signals()
         self._setup_shortcuts()
         QTimer.singleShot(0, self._update_ui_state)
+
+    def showEvent(self, event):
+        """Sincroniza controles ao exibir (ex.: após alterar em Config → Pré-processamento)."""
+        super().showEvent(event)
+        self._sync_combo_to_settings()
     
     def _setup_ui(self) -> None:
         """Configura a interface."""
@@ -278,17 +284,15 @@ class OperationPage(QWidget):
         self._mm_per_pixel_op.valueChanged.connect(self._on_mm_per_pixel_changed)
         controls_layout.addWidget(self._mm_per_pixel_op)
         
-        # Toggle para exibir ROI de confinamento
-        self._show_roi_cb = QCheckBox("ROI")
-        self._show_roi_cb.setToolTip(
-            "Exibe/oculta o retângulo da ROI de confinamento na imagem.\n"
-            "O retângulo amarelo indica a área válida para centroides."
+        # Combo para ligar/desligar exibição da ROI de confinamento
+        self._show_roi_combo = QComboBox()
+        self._show_roi_combo.addItems(["ROI: Ligado", "ROI: Desligado"])
+        self._show_roi_combo.setToolTip(
+            "Liga/desliga a exibição do retângulo da ROI de confinamento (linhas verdes).\n"
+            "Dimensionamento em Configuração → Pré-processamento."
         )
-        self._show_roi_cb.setChecked(False)
-        self._show_roi_cb.stateChanged.connect(
-            lambda state: self._video_widget.set_show_confinement_roi(state == Qt.Checked)
-        )
-        controls_layout.addWidget(self._show_roi_cb)
+        self._show_roi_combo.currentIndexChanged.connect(self._on_show_roi_changed)
+        controls_layout.addWidget(self._show_roi_combo)
 
         # Separador visual
         sep2 = QFrame()
@@ -322,7 +326,7 @@ class OperationPage(QWidget):
         
         # Controles de ciclo pick-and-place
         self._continuous_cb = QCheckBox("Modo Continuo")
-        self._continuous_cb.setChecked(False)
+        self._continuous_cb.setChecked(True)
         self._continuous_cb.setToolTip(
             "Marcado: ciclos de pick-and-place executam automaticamente.\n"
             "Desmarcado: aguarda 'Autorizar envio ao CLP' após detecção."
@@ -333,7 +337,7 @@ class OperationPage(QWidget):
         layout.addWidget(controls_frame)
     
     def _sync_combo_to_settings(self) -> None:
-        """Sincroniza o combo de fonte e mm/px com o settings."""
+        """Sincroniza o combo de fonte, mm/px e ROI de confinamento com o settings."""
         source_type_map = {"usb": 0, "gige": 1}
         combo_index = source_type_map.get(self._settings.streaming.source_type, 0)
         self._source_combo.setCurrentIndex(combo_index)
@@ -342,7 +346,20 @@ class OperationPage(QWidget):
             self._mm_per_pixel_op.blockSignals(True)
             self._mm_per_pixel_op.setValue(self._settings.preprocess.mm_per_pixel)
             self._mm_per_pixel_op.blockSignals(False)
+        # ROI de confinamento (sincroniza combo e VideoWidget)
+        if hasattr(self, "_show_roi_combo"):
+            self._show_roi_combo.blockSignals(True)
+            self._show_roi_combo.setCurrentIndex(0 if self._settings.preprocess.confinement.show_roi else 1)
+            self._show_roi_combo.blockSignals(False)
+        if hasattr(self, "_video_widget"):
+            self._video_widget.set_show_confinement_roi(self._settings.preprocess.confinement.show_roi)
     
+    def _on_show_roi_changed(self, index: int) -> None:
+        """Atualiza exibição da ROI de confinamento e persiste em settings (Config → Pré-processamento)."""
+        show = index == 0
+        self._video_widget.set_show_confinement_roi(show)
+        self._settings.preprocess.confinement.show_roi = show
+
     def _on_mm_per_pixel_changed(self, value: float) -> None:
         """Atualiza mm/px em tempo real (efeito imediato, sem reiniciar)."""
         self._settings.preprocess.mm_per_pixel = value
@@ -596,14 +613,14 @@ class OperationPage(QWidget):
         Comunica as coordenadas do centroide ao CLP.
         
         Chamado a cada 25 frames.
-        Usa as TAGs definidas: CENTROID_X, CENTROID_Y, CONFIDENCE, etc.
-        Inclui handshake básico: só envia se CLP conectado e visão OK.
-        Não envia durante ciclo do robô (pick/place) para evitar sobrescrever coordenadas em uso.
-        Throttle: intervalo mínimo entre envios (evita flood quando objeto muito perto).
+        Em modo contínuo, o RobotController é o único responsável pelo envio (via state machine).
+        Em modo manual, este método envia periodicamente quando há detecção e robô não está em ciclo.
         """
         if self._last_best_detection is None:
             return
-        
+        if self._robot_controller.cycle_mode == "continuous":
+            return
+
         # Handshake básico: verifica estado do CLP
         if not self._cip_client._state.is_connected:
             self._logger.debug("skipping_centroid_plc_not_connected")
@@ -775,6 +792,15 @@ class OperationPage(QWidget):
             self._logger.warning("failed_to_set_vision_ready_false", error=str(e))
         finally:
             await self._cip_client.disconnect()
+
+    async def _shutdown_plc_with_timeout(self) -> None:
+        """Desliga CLP com timeout para não bloquear a UI."""
+        try:
+            await asyncio.wait_for(self._shutdown_plc_connection(), timeout=5.0)
+        except asyncio.TimeoutError:
+            self._logger.warning("plc_shutdown_timeout")
+        except Exception as e:
+            self._logger.warning("plc_shutdown_error", error=str(e))
     
     @Slot()
     def _stop_system(self) -> None:
@@ -804,6 +830,8 @@ class OperationPage(QWidget):
             self._on_stop_worker_finished, Qt.ConnectionType.QueuedConnection
         )
         self._stop_worker.start()
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     def _on_stop_worker_finished(self) -> None:
         """Chamado quando o worker de parada termina (não bloqueia UI)."""
@@ -818,7 +846,8 @@ class OperationPage(QWidget):
         self._frame_count = 0
         self._last_best_detection = None
         self._last_centroid_send_time = 0.0
-        safe_create_task(self._shutdown_plc_connection(), "shutdown_plc")
+        # Shutdown PLC com timeout para não bloquear a UI
+        safe_create_task(self._shutdown_plc_with_timeout(), "shutdown_plc")
         self._video_widget.clear()
         self._update_ui_state()
         QTimer.singleShot(0, self._update_ui_state)
