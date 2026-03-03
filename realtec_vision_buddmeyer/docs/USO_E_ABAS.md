@@ -34,13 +34,11 @@ O modo (real vs simulado) é definido em **Configuração → Controle (CLP)** (
   - **Câmera USB** — câmera USB (índice definido em Configuração).
   - **Câmera GigE** — IP e porta GigE (Configuração).
 - **Iniciar (F5):** inicia stream + inferência + conexão CLP + controlador de robô. A fonte usada é a **selecionada no combo** (não apenas a do config.yaml).
-- **Pausar / Retomar:** Pausa o stream e a inferência sem encerrar a sessão. Ao pausar, o botão muda para "Retomar". Útil para inspecionar o estado atual sem processar novos frames.
-- **Parar (F6):** para stream, inferência, controlador e encerra conexão CLP (VisionReady = False).
+- **Parar (F6):** para stream, inferência, controlador e encerra conexão CLP (VisionReady = False). A parada é executada em segundo plano para não bloquear a interface.
 - **mm/px:** calibração em tempo real (mesmo valor da Configuração; efeito imediato nas coordenadas exibidas e enviadas ao CLP).
 - **ROI (checkbox):** exibe ou oculta o retângulo da área de confinamento sobre a imagem (traço fino amarelo). Útil para visualizar a região válida para centroides quando o confinamento está habilitado em Configuração → Pré-processamento.
 - **Modo Contínuo (checkbox):** quando marcado, ciclos de pick-and-place executam automaticamente sem intervenção. Quando desmarcado (**padrão**), **após uma detecção** aguarda "Autorizar envio ao CLP" antes de enviar coordenadas.
 - **Autorizar envio ao CLP (botão):** em modo manual, quando um objeto é detectado (acima do threshold), este botão é exibido. Ao clicar, as coordenadas são enviadas ao CLP e o ciclo (ACK → Pick → Place) segue. Sem isso, o processo não é deflagado.
-- **Stop (botão):** interrompe imediatamente o ciclo e comandos ao robô. Detecções continuam ativas; apenas envio ao CLP e comandos ao robô são parados. Habilitado quando o sistema está rodando.
 - **Status atual (barra):** exibe em tempo real a etapa em execução (ex.: "Aguardando PICK…", "PLACE concluído").
 
 ### Ciclo de Pick-and-Place (handshake Visão/CLP/Robô)
@@ -86,13 +84,11 @@ Abaixo, cada variável ou controle da interface é listado com tipo, localizaç�
 |----------|------|-----------|
 | **Fonte** | QComboBox | Seleção da fonte de vídeo: "Câmera USB" ou "Câmera GigE". O índice USB e IP/porta GigE vêm da Configuração; a fonte efetiva ao clicar Iniciar é a selecionada aqui. |
 | **Iniciar** | QPushButton | Inicia stream, inferência, conexão CIP e controlador de robô. Atalho: F5. Desabilitado enquanto o sistema está rodando. |
-| **Pausar** | QPushButton | Pausa o stream e a inferência (botão alterna para "Retomar"). Não desconecta o CLP. |
-| **Parar** | QPushButton | Para stream, inferência, controlador e encerra conexão CLP (VisionReady = False). Atalho: F6. |
+| **Parar** | QPushButton | Para stream, inferência, controlador e encerra conexão CLP (VisionReady = False). Atalho: F6. Parada em segundo plano (não bloqueia a UI). |
 | **mm/px** | QDoubleSpinBox | Calibração mm por pixel (ex.: 0,25). Valor em tempo real; coordenadas exibidas e enviadas ao CLP usam este valor. Sincronizado com Configuração → Pré-processamento. |
 | **ROI** | QCheckBox | Liga/desliga a exibição do retângulo da área de confinamento sobre o vídeo (traço amarelo fino). Só desenha se o confinamento estiver habilitado em Configuração. |
 | **Modo Contínuo** | QCheckBox | Marcado: ciclos seguem automaticamente após cada detecção. Desmarcado (padrão): após detecção, aguarda "Autorizar envio ao CLP". |
 | **Autorizar envio ao CLP** | QPushButton | Visível em modo manual quando há detecção. Ao clicar, envia coordenadas ao CLP e inicia o ciclo (ACK → Pick → Place). |
-| **Stop** | QPushButton | Interrompe ciclo e comandos ao robô; detecções continuam; apenas envio ao CLP e comandos ao robô são parados. Habilitado quando o sistema está rodando e o robô não está parado. |
 | **Status atual** | QLabel | Texto da etapa atual do controlador (ex.: "Aguardando detecção", "Aguardando PICK…", "PLACE concluído"). |
 | **Vídeo (central)** | VideoWidget | Exibe stream ao vivo, overlay de detecções (caixa e centroide da melhor detecção) e, se ativo, o retângulo da ROI. Duplo clique ou F11: tela cheia. |
 | **Legenda da fonte** | QLabel | Texto abaixo do vídeo indicando a fonte (ex.: "Fonte: Câmera USB (índice 0)"). |

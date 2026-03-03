@@ -48,6 +48,24 @@ class ModelLoadWorker(QThread):
             self.finished.emit(False)
 
 
+class SystemStopWorker(QThread):
+    """Worker para parar o sistema em background (evita bloquear UI)."""
+    finished = Signal()
+
+    def __init__(self, parent_page: "OperationPage"):
+        super().__init__()
+        self._page = parent_page
+
+    def run(self) -> None:
+        try:
+            self._page._robot_controller.stop()
+            self._page._inference_engine.stop()
+            self._page._stream_manager.stop()
+        except Exception as e:
+            self._page._logger.warning("stop_worker_error", error=str(e))
+        self.finished.emit()
+
+
 class OperationPage(QWidget):
     """
     Página de Operação.
@@ -87,11 +105,14 @@ class OperationPage(QWidget):
         self._error_count = 0  # Contador total de erros
         self._model_load_worker: Optional[ModelLoadWorker] = None
         self._preload_worker: Optional[ModelLoadWorker] = None
+        self._stop_worker: Optional[SystemStopWorker] = None
+        self._is_stopping = False
 
         self._setup_ui()
         self._sync_combo_to_settings()
         self._connect_signals()
         self._setup_shortcuts()
+        QTimer.singleShot(0, self._update_ui_state)
     
     def _setup_ui(self) -> None:
         """Configura a interface."""
@@ -215,28 +236,6 @@ class OperationPage(QWidget):
         self._play_btn.clicked.connect(self._start_system)
         controls_layout.addWidget(self._play_btn)
         
-        self._pause_btn = QPushButton("⏸ Pausar")
-        self._pause_btn.setMinimumWidth(100)
-        self._pause_btn.setEnabled(False)
-        self._pause_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffc107;
-                color: black;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #e0a800;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-                color: white;
-            }
-        """)
-        self._pause_btn.clicked.connect(self._toggle_pause)
-        controls_layout.addWidget(self._pause_btn)
-        
         self._stop_btn = QPushButton("⏹ Parar")
         self._stop_btn.setMinimumWidth(100)
         self._stop_btn.setEnabled(False)
@@ -331,31 +330,6 @@ class OperationPage(QWidget):
         self._continuous_cb.stateChanged.connect(self._on_cycle_mode_changed)
         controls_layout.addWidget(self._continuous_cb)
         
-        self._stop_cycle_btn = QPushButton("Stop")
-        self._stop_cycle_btn.setMinimumWidth(100)
-        self._stop_cycle_btn.setEnabled(False)
-        self._stop_cycle_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #dc3545;
-                color: white;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #c82333;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
-        self._stop_cycle_btn.setToolTip(
-            "Interrompe imediatamente o ciclo e comandos ao robô. "
-            "Detecções continuam ativas; apenas envio ao CLP e comandos ao robô são parados."
-        )
-        self._stop_cycle_btn.clicked.connect(self._stop_cycle_immediately)
-        controls_layout.addWidget(self._stop_cycle_btn)
-        
         layout.addWidget(controls_frame)
     
     def _sync_combo_to_settings(self) -> None:
@@ -449,6 +423,7 @@ class OperationPage(QWidget):
         """Inicia o sistema."""
         if self._is_running:
             return
+        self._play_btn.setEnabled(False)
 
         source_types = ["usb", "gige"]
         source_labels = ["Câmera USB", "Câmera GigE"]
@@ -468,6 +443,7 @@ class OperationPage(QWidget):
                 self._event_console.add_error(
                     "Configure o IP da câmera GigE em Configuração → Fonte de Vídeo"
                 )
+                self._play_btn.setEnabled(True)
                 return
 
         if source_type == "usb":
@@ -487,6 +463,7 @@ class OperationPage(QWidget):
             self._event_console.add_error(
                 f"Falha ao iniciar stream ({source_labels[source_index]})"
             )
+            self._play_btn.setEnabled(True)
             return
         
         self._event_console.add_info(
@@ -525,6 +502,8 @@ class OperationPage(QWidget):
         if not self._inference_engine.start():
             self._event_console.add_error("Falha ao iniciar inferência")
             self._stream_manager.stop()
+            self._play_btn.setEnabled(True)
+            self._update_ui_state()
             return
         
         self._event_console.add_info("Inferência iniciada - detecção ativa")
@@ -799,74 +778,68 @@ class OperationPage(QWidget):
     
     @Slot()
     def _stop_system(self) -> None:
-        """Para o sistema."""
+        """Para o sistema (não bloqueia a UI)."""
         if not self._is_running:
             return
-        
-        self._event_console.add_info("Parando sistema...")
+        if self._is_stopping or (self._stop_worker and self._stop_worker.isRunning()):
+            return  # debounce: já parando
 
-        # Para stream MJPEG
+        self._is_stopping = True
+        self._event_console.add_info("Parando sistema...")
+        self._play_btn.setEnabled(False)
+        self._stop_btn.setEnabled(False)
+        main_window = self.window()
+        if main_window and hasattr(main_window, "_start_action"):
+            main_window._start_action.setEnabled(False)
+        if main_window and hasattr(main_window, "_stop_action"):
+            main_window._stop_action.setEnabled(False)
+
+        # Para stream MJPEG imediatamente (não bloqueia)
         if self._mjpeg_server:
             self._mjpeg_server.stop()
             self._mjpeg_server = None
 
-        # Para componentes
-        self._robot_controller.stop()
-        self._inference_engine.stop()
-        self._stream_manager.stop()
-        
-        # Seta VisionReady = False e desconecta CLP
-        safe_create_task(self._shutdown_plc_connection(), "shutdown_plc")
-        
+        self._stop_worker = SystemStopWorker(self)
+        self._stop_worker.finished.connect(
+            self._on_stop_worker_finished, Qt.ConnectionType.QueuedConnection
+        )
+        self._stop_worker.start()
+
+    def _on_stop_worker_finished(self) -> None:
+        """Chamado quando o worker de parada termina (não bloqueia UI)."""
+        if self._stop_worker:
+            try:
+                self._stop_worker.finished.disconnect(self._on_stop_worker_finished)
+            except RuntimeError:
+                pass
+            self._stop_worker = None
+        self._is_stopping = False
         self._is_running = False
         self._frame_count = 0
         self._last_best_detection = None
         self._last_centroid_send_time = 0.0
-        self._update_ui_state()
-        
-        # Reseta texto do botão pause caso estivesse pausado
-        self._pause_btn.setText("⏸ Pausar")
-        
+        safe_create_task(self._shutdown_plc_connection(), "shutdown_plc")
         self._video_widget.clear()
-        
+        self._update_ui_state()
+        QTimer.singleShot(0, self._update_ui_state)
         self._event_console.add_info("Sistema parado")
         self._status_panel.set_system_status("STOPPED")
     
-    @Slot()
-    def _toggle_pause(self) -> None:
-        """Alterna pause/resume do stream e da inferência."""
-        if not self._is_running:
-            return
-        
-        if self._stream_manager._worker and self._stream_manager._worker._paused:
-            # Resumir
-            self._stream_manager.resume()
-            self._inference_engine.start()
-            self._pause_btn.setText("⏸ Pausar")
-            self._event_console.add_info("Sistema retomado")
-            self._status_panel.set_system_status("RUNNING")
-            self._logger.info("system_resumed")
-        else:
-            # Pausar
-            self._stream_manager.pause()
-            self._inference_engine.stop()
-            self._pause_btn.setText("▶ Retomar")
-            self._event_console.add_info("Sistema pausado")
-            self._status_panel.set_system_status("PAUSED")
-            self._logger.info("system_paused")
-    
+    def _sync_menu_actions(self) -> None:
+        """Sincroniza ações do menu (Iniciar/Parar) com o estado da UI."""
+        main_window = self.window()
+        if main_window and hasattr(main_window, "_start_action"):
+            main_window._start_action.setEnabled(not self._is_running)
+        if main_window and hasattr(main_window, "_stop_action"):
+            main_window._stop_action.setEnabled(self._is_running)
+
     def _update_ui_state(self) -> None:
         """Atualiza estado da UI."""
         self._play_btn.setEnabled(not self._is_running)
-        self._pause_btn.setEnabled(self._is_running)
         self._stop_btn.setEnabled(self._is_running)
         self._source_combo.setEnabled(not self._is_running)
-        
-        # Botão Stop: habilitado quando sistema rodando e robô não está parado
-        self._stop_cycle_btn.setEnabled(
-            self._is_running and self._robot_controller.state.value != "STOPPED"
-        )
-        
+        self._sync_menu_actions()
+
         if not self._is_running:
             self._status_step_label.setText("—")
             self._authorize_send_btn.setVisible(False)
@@ -909,9 +882,11 @@ class OperationPage(QWidget):
     def _on_stream_stopped(self) -> None:
         """Handler para stream parado (inclusive por falha em change_source)."""
         self._event_console.add_info("Stream parado", "Stream")
-        
-        # Se a UI ainda pensa que está rodando mas o stream parou,
-        # precisamos sincronizar o estado para evitar inconsistência.
+        # Se já estamos parando (worker em execução), stream_stopped é esperado — não reentrar.
+        if self._is_stopping:
+            return
+        # Se a UI ainda pensa que está rodando mas o stream parou inesperadamente,
+        # sincronizar o estado.
         if self._is_running and not self._stream_manager.is_running:
             self._logger.warning("stream_stopped_unexpectedly_resetting_state")
             self._stop_system()
@@ -974,29 +949,9 @@ class OperationPage(QWidget):
         """Handler para mudança de modo de ciclo (manual/contínuo)."""
         mode = "continuous" if self._continuous_cb.isChecked() else "manual"
         self._robot_controller.set_cycle_mode(mode)
-        self._stop_cycle_btn.setEnabled(
-            self._is_running and self._robot_controller.state.value != "STOPPED"
-        )
         label = "Contínuo" if mode == "continuous" else "Manual"
         self._event_console.add_info(f"Modo de ciclo: {label}")
-    
-    def _stop_cycle_immediately(self) -> None:
-        """Interrompe imediatamente o ciclo e comandos ao robô. Detecções continuam ativas."""
-        self._robot_controller.stop()
-        self._stop_cycle_btn.setEnabled(False)
-        self._event_console.add_warning(
-            "Ciclo interrompido. Detecções ativas; envio ao CLP e comandos ao robô parados.",
-            "Robô"
-        )
-        self._status_step_label.setText("Parado (Stop acionado)")
-        # Sinaliza ao CLP que visão não está enviando coordenadas
-        async def _set_vision_not_ready():
-            try:
-                await self._cip_client.set_vision_ready(False)
-            except Exception as e:
-                self._logger.warning("failed_to_set_vision_ready_on_stop", error=str(e))
-        safe_create_task(_set_vision_not_ready(), "set_vision_ready_false")
-    
+
     def _authorize_send_to_plc(self) -> None:
         """Autoriza envio das coordenadas ao CLP apos deteccao (modo manual)."""
         self._robot_controller.authorize_send_to_plc()
@@ -1027,17 +982,11 @@ class OperationPage(QWidget):
     
     @Slot(str)
     def _on_robot_state_changed(self, state_value: str) -> None:
-        """Handler para mudanca de estado do robo: botoes e barra de status."""
+        """Handler para mudanca de estado do robo: barra de status e botão Autorizar."""
         from control.robot_controller import RobotControlState
-        
-        # Barra de status
+
         self._status_step_label.setText(self._status_message_for_state(state_value))
-        
-        # Botão Stop: habilitado quando rodando e robô não parado
-        self._stop_cycle_btn.setEnabled(
-            self._is_running and state_value != RobotControlState.STOPPED.value
-        )
-        
+
         # Botao Autorizar envio ao CLP (modo manual, apos deteccao)
         if (
             state_value == RobotControlState.WAITING_SEND_AUTHORIZATION.value
