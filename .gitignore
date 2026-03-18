@@ -7,12 +7,12 @@ env/
 # === Logs ===
 logs/
 *.log
-buddmeyer_vision_v2/logs/*.log
+realtec_vision_buddmeyer/logs/*.log
 
 # === Build e distribuição (installer) ===
-buddmeyer_vision_v2/installer/build/
-buddmeyer_vision_v2/installer/dist/
-buddmeyer_vision_v2/installer*.zip
+realtec_vision_buddmeyer/installer/build/
+realtec_vision_buddmeyer/installer/dist/
+realtec_vision_buddmeyer/installer*.zip
 build/
 dist/
 *.egg-info/
@@ -26,11 +26,11 @@ dist/
 *.mov
 
 # === Modelos de visão computacional (binários pesados) ===
-buddmeyer_vision_v2/models/*.safetensors
-buddmeyer_vision_v2/models/*.pt
-buddmeyer_vision_v2/models/*.pth
-buddmeyer_vision_v2/models/*.onnx
-buddmeyer_vision_v2/models/*.bin
+realtec_vision_buddmeyer/models/*.safetensors
+realtec_vision_buddmeyer/models/*.pt
+realtec_vision_buddmeyer/models/*.pth
+realtec_vision_buddmeyer/models/*.onnx
+realtec_vision_buddmeyer/models/*.bin
 *.safetensors
 *.pt
 *.pth

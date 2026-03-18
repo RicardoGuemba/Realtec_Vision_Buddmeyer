@@ -1,6 +1,6 @@
 @echo off
-title Buddmeyer Vision System v2.0
-cd /d "C:\Vision_Buddmeyer_PySide"
-call venv\Scripts\activate.bat
-python buddmeyer_vision_v2\main.py
+title Realtec Vision Buddmeyer
+cd /d "%~dp0"
+if exist venv\Scripts\activate.bat call venv\Scripts\activate.bat
+python realtec_vision_buddmeyer\main.py
 pause
