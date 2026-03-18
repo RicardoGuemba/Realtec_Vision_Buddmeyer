@@ -18,7 +18,7 @@ Documento único com visão geral, features, UI, arquitetura e manual de manuten
 
 ### 1.1 Objetivo
 
-Sistema desktop **Windows e macOS** para **automação de expedição (pick-and-place)** de embalagens, integrando:
+Sistema desktop **macOS, Linux/Ubuntu e Windows** para **automação de expedição (pick-and-place)** de embalagens, integrando:
 
 - **Visão**: detecção em tempo real com modelos DETR/RT-DETR (Hugging Face).
 - **Comunicação industrial**: CLP Omron NX102 via CIP/EtherNet-IP (biblioteca aphyt).
@@ -39,8 +39,8 @@ Fonte de vídeo → StreamManager (QThread) → Frame Buffer
 
 ### 1.3 Como executar
 
-- **Windows:** duplo-clique em `Iniciar_Buddmeyer_Vision.bat` (raiz do repo) ou em `realtec_vision_buddmeyer/start.bat`.
 - **macOS:** duplo-clique em **`Iniciar Realtec Vision.command`** (raiz do repo) ou no Terminal: `./Iniciar_Realtec_Vision.sh`. Ver [MACOS_SETUP.md](MACOS_SETUP.md).
+- **Linux/Ubuntu:** no terminal: `./Iniciar_Realtec_Vision.sh`. Ver [UBUNTU_SETUP.md](UBUNTU_SETUP.md).
 
 ### 1.4 Tecnologias principais
 
@@ -310,4 +310,4 @@ realtec_vision_buddmeyer/
 
 **Versão do documento:** 1.0  
 **Projeto:** Buddmeyer Vision System v2.0  
-**Plataforma:** Windows 10/11, PySide6, PyTorch, aphyt (CIP)
+**Plataforma:** macOS 12+, Ubuntu 22.04+, Windows 10/11 | PySide6, PyTorch, aphyt (CIP)

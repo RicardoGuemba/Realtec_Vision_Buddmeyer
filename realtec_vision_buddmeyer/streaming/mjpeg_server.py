@@ -2,7 +2,7 @@
 """
 Servidor HTTP MJPEG para streaming de vídeo via navegador.
 URL simples para copiar e colar na barra de endereços (ex.: http://127.0.0.1:8080/stream).
-Compatível com Windows e macOS.
+Compatível com Windows, macOS e Linux.
 """
 
 import socket
@@ -22,7 +22,7 @@ logger = get_logger("streaming.mjpeg")
 def get_local_ip() -> str:
     """
     Obtém IP local da interface de rede (para exibir na URL).
-    Usa múltiplos métodos para compatibilidade com Windows e macOS.
+    Usa múltiplos métodos para compatibilidade com Windows, macOS e Linux.
     """
     # Método 1: socket UDP para gateway (funciona em muitas redes)
     try:

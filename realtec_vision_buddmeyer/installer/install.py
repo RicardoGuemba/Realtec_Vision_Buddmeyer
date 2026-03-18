@@ -197,35 +197,34 @@ def install_dependencies(venv_python, requirements_file):
     return True
 
 def create_start_scripts(project_dir, venv_python):
-    """Cria scripts de inicialização."""
+    """Cria scripts de inicialização conforme o sistema operacional."""
     print_info("Criando scripts de inicialização...")
     
-    # Script BAT
-    bat_content = f"""@echo off
-title Buddmeyer Vision System v2.0
+    if platform.system() == "Windows":
+        # Script BAT (Windows)
+        bat_content = f"""@echo off
+title Realtec Vision Buddmeyer
 cd /d "{project_dir}"
 call venv\\Scripts\\activate.bat
 python realtec_vision_buddmeyer\\main.py
 pause
 """
-    
-    bat_file = project_dir / "Iniciar_Buddmeyer_Vision.bat"
-    with open(bat_file, "w", encoding="utf-8") as f:
-        f.write(bat_content)
-    print_success(f"Script criado: {bat_file.name}")
-    
-    # Script PowerShell
-    ps_content = f"""# Buddmeyer Vision System v2.0
-$ErrorActionPreference = "Stop"
-Set-Location "{project_dir}"
-& "{project_dir}\\venv\\Scripts\\Activate.ps1"
-python "{project_dir}\\realtec_vision_buddmeyer\\main.py"
+        bat_file = project_dir / "Iniciar_Realtec_Vision.bat"
+        with open(bat_file, "w", encoding="utf-8") as f:
+            f.write(bat_content)
+        print_success(f"Script criado: {bat_file.name}")
+    else:
+        # Script shell (macOS / Linux)
+        sh_content = f"""#!/bin/bash
+cd "{project_dir}"
+source venv/bin/activate
+python realtec_vision_buddmeyer/main.py
 """
-    
-    ps_file = project_dir / "Iniciar_Buddmeyer_Vision.ps1"
-    with open(ps_file, "w", encoding="utf-8") as f:
-        f.write(ps_content)
-    print_success(f"Script criado: {ps_file.name}")
+        sh_file = project_dir / "Iniciar_Realtec_Vision.sh"
+        with open(sh_file, "w", encoding="utf-8") as f:
+            f.write(sh_content)
+        sh_file.chmod(0o755)
+        print_success(f"Script criado: {sh_file.name}")
     
     return True
 
@@ -364,11 +363,17 @@ def main():
         print_success(f"Sistema instalado em: {install_dir}")
         print_info("\nPara iniciar o sistema:")
         print_info(f"  1. Navegue até: {install_dir}")
-        print_info(f"  2. Dê duplo clique em: Iniciar_Buddmeyer_Vision.bat")
-        print_info("\nOu execute no terminal:")
-        print_info(f"  cd {install_dir}")
-        print_info(f"  .\\venv\\Scripts\\activate")
-        print_info(f"  python realtec_vision_buddmeyer\\main.py")
+        if platform.system() == "Windows":
+            print_info(f"  2. Dê duplo clique em: Iniciar_Realtec_Vision.bat")
+            print_info("\nOu execute no terminal:")
+            print_info(f"  cd {install_dir}")
+            print_info(f"  .\\venv\\Scripts\\activate")
+        else:
+            print_info(f"  2. Execute: ./Iniciar_Realtec_Vision.sh")
+            print_info("\nOu execute no terminal:")
+            print_info(f"  cd {install_dir}")
+            print_info(f"  source venv/bin/activate")
+        print_info(f"  python realtec_vision_buddmeyer/main.py")
     else:
         print_warning("Instalação concluída com avisos")
         print_info("Algumas dependências podem não estar instaladas corretamente")

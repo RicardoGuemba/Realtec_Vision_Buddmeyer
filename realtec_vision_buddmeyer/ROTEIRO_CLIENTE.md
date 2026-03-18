@@ -6,11 +6,12 @@ Este documento orienta o uso da aplicação no ambiente do cliente: configuraç�
 
 ## 1. Como iniciar a aplicação
 
-- **Pelo atalho:** use o ícone/atalho que abre o Buddmeyer Vision (por exemplo, `Iniciar_Buddmeyer_Vision.bat` na pasta do projeto).
-- **Pelo terminal:** na pasta do projeto (ex.: `C:\Vision_Buddmeyer_PySide`), execute:
-  ```bat
-  venv\Scripts\activate
-  python realtec_vision_buddmeyer\main.py
+- **Pelo atalho:** use o ícone/atalho que abre o Realtec Vision (por exemplo, `Iniciar Realtec Vision.command` no macOS ou `Iniciar_Realtec_Vision.sh` no Linux).
+- **Pelo terminal:** na pasta do projeto, execute:
+  ```bash
+  # macOS / Linux
+  source venv/bin/activate
+  python realtec_vision_buddmeyer/main.py
   ```
 - A janela principal abre com as abas **Operação**, **Configuração** e **Diagnósticos**.
 

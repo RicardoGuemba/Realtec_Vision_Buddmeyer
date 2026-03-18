@@ -15,9 +15,9 @@ Sistema de visão computacional para automação de expedição (pick-and-place)
 
 | Requisito | Valor |
 |-----------|-------|
-| Sistema Operacional | Windows 10/11 ou macOS 12+ (Monterey ou superior) |
+| Sistema Operacional | macOS 12+, Ubuntu 22.04+ ou Windows 10/11 |
 | Python | 3.10 ou superior |
-| GPU | NVIDIA RTX (Windows) ou Apple Silicon MPS (macOS M1/M2/M3/M4) – opcional |
+| GPU | NVIDIA CUDA (Linux/Windows) ou Apple Silicon MPS (macOS) – opcional |
 | RAM | Mínimo 8 GB (recomendado 16 GB) |
 | Disco | 10 GB livres |
 
@@ -26,14 +26,15 @@ Sistema de visão computacional para automação de expedição (pick-and-place)
 ### 1. Clone ou copie o projeto
 
 ```bash
-cd C:\Vision_Buddmeyer_PySide
+cd /caminho/para/Realtec_Vision_Buddmeyer
 ```
 
 ### 2. Crie um ambiente virtual
 
 ```bash
-python -m venv venv
-venv\Scripts\activate
+# macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
 ```
 
 ### 3. Instale as dependências
@@ -62,9 +63,13 @@ python realtec_vision_buddmeyer/main.py
 ```
 
 **macOS:**
-- **Duplo-clique:** use o atalho `Iniciar Realtec Vision.command` na raiz do repositório (abre o Terminal e inicia o sistema).
-- **Terminal:** `./Iniciar_Realtec_Vision.sh` na raiz do repo.
-- Detalhes e Apple Silicon (MPS): [docs/MACOS_SETUP.md](docs/MACOS_SETUP.md).
+- **Duplo-clique:** use o atalho `Iniciar Realtec Vision.command` na raiz do repositório.
+- **Terminal:** `./Iniciar_Realtec_Vision.sh`
+- Detalhes: [docs/MACOS_SETUP.md](docs/MACOS_SETUP.md).
+
+**Linux/Ubuntu:**
+- **Terminal:** `./Iniciar_Realtec_Vision.sh`
+- Detalhes e dependências de sistema: [docs/UBUNTU_SETUP.md](docs/UBUNTU_SETUP.md).
 
 ## 🧪 Testes
 
@@ -78,7 +83,9 @@ Inclui testes unitários (config, settings, widgets) e funcionais (inicializaç�
 
 ## 📖 Documentação
 
-- **[docs/DOCUMENTACAO_COMPLETA.md](docs/DOCUMENTACAO_COMPLETA.md)** – documentação principal: visão geral, features, UI, arquitetura, manual de manutenção e contrato de TAGs CLP. Use como referência atualizada.
+- **[docs/DOCUMENTACAO_COMPLETA.md](docs/DOCUMENTACAO_COMPLETA.md)** – documentação principal: visão geral, features, UI, arquitetura, manual de manutenção e contrato de TAGs CLP.
+- **[docs/MACOS_SETUP.md](docs/MACOS_SETUP.md)** – instalação e uso no macOS.
+- **[docs/UBUNTU_SETUP.md](docs/UBUNTU_SETUP.md)** – instalação e uso no Ubuntu.
 - **[docs/MANUAL_GENTL(GIGE).md](docs/MANUAL_GENTL(GIGE).md)** – câmeras GigE/GenTL.
 - **[ROTEIRO_CLIENTE.md](ROTEIRO_CLIENTE.md)** – passo a passo para o cliente (configuração do CLP, logs e troubleshooting).
 

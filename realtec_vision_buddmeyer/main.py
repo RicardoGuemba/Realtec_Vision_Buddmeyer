@@ -5,11 +5,12 @@ Realtec Vision Buddmeyer
 Sistema de visão computacional para automação de expedição (pick-and-place).
 
 Ponto de entrada principal da aplicação.
-Suporta Windows e macOS (Apple Silicon: MPS para inferência).
+Suporta Windows, macOS (Apple Silicon: MPS) e Linux/Ubuntu.
 """
 
 import sys
 import asyncio
+import platform
 from pathlib import Path
 
 # Adiciona diretório raiz ao path
@@ -65,8 +66,12 @@ def main() -> int:
     app.setApplicationVersion("2.0.0")
     app.setOrganizationName("Realtec")
     
-    # Fonte padrão (Segoe UI no Windows; no macOS usa fallback do sistema)
-    font = QFont("Segoe UI", 10)
+    # Fonte: Segoe UI no Windows; fontes do sistema em macOS/Linux
+    if platform.system() == "Windows":
+        font = QFont("Segoe UI", 10)
+    else:
+        font = QFont()  # Usa fonte padrão do sistema (SF Pro no macOS, Ubuntu/DejaVu no Linux)
+        font.setPointSize(10)
     app.setFont(font)
     
     # Importa MainWindow aqui para evitar importações circulares

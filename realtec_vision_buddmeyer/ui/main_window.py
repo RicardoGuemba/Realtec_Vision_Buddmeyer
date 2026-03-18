@@ -441,7 +441,7 @@ class MainWindow(QMainWindow):
                 <li>OpenCV</li>
                 <li>aphyt (CIP/EtherNet-IP)</li>
             </ul>
-            <p><b>Plataforma:</b> Windows 10/11</p>
+            <p><b>Plataforma:</b> macOS 12+ / Ubuntu 22.04+ / Windows 10/11</p>
             <p>© 2025 Sistema de Automação Industrial</p>
             """
         )

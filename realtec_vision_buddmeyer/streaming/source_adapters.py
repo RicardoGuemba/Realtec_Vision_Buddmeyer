@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Dict, Any
+import platform
 import time
 
 import cv2
@@ -230,11 +231,14 @@ class USBCameraAdapter(BaseSourceAdapter):
     
     def open(self) -> bool:
         """Abre a câmera USB."""
-        # Tenta DirectShow no Windows primeiro
-        self._capture = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+        # DirectShow (CAP_DSHOW) só existe no Windows; Linux/macOS usam V4L2/AVFoundation
+        if platform.system() == "Windows":
+            self._capture = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+        else:
+            self._capture = cv2.VideoCapture(self.camera_index)
         
         if not self._capture.isOpened():
-            # Fallback para default
+            # Fallback para backend padrão (ex.: V4L2 no Linux)
             self._capture = cv2.VideoCapture(self.camera_index)
         
         if not self._capture.isOpened():
